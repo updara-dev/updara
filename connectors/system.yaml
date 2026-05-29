@@ -1,0 +1,13 @@
+name: system
+display_name: System
+icon: server.svg
+category: system
+
+check:
+  type: shell
+  # Works on any Linux/Alpine: reports kernel version, always "up to date"
+  command: "uname -r"
+  parse:
+    kernel: "$stdout"
+  update_available: "kernel != kernel"
+  interval: 300

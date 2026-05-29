@@ -1,0 +1,21 @@
+name: apt
+display_name: APT Packages
+icon: debian.svg
+category: system
+docs: https://wiki.debian.org/AptCli
+
+vars: []  # no variables needed
+
+check:
+  type: shell
+  # counts upgradable lines (skips header "Listing..." line)
+  command: "apt list --upgradable 2>/dev/null | tail -n +2 | wc -l"
+  parse:
+    count: "$stdout"
+  update_available: "count > 0"
+  interval: 3600
+
+update:
+  type: shell
+  command: "apt-get upgrade -y"
+  requires_confirmation: true

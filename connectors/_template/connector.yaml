@@ -1,0 +1,37 @@
+# Updara Connector Template
+# Copy this file, rename it, and fill in the fields.
+# See docs/writing-a-connector.md for the full reference.
+
+name: my-connector           # unique slug, lowercase, no spaces
+display_name: My Connector   # shown in the dashboard
+icon: my-connector.svg       # optional – drop SVG into frontend/public/icons/
+category: system             # system | network | infrastructure | smart-home | media | tools
+docs: https://example.com    # upstream docs / project URL
+
+check:
+  # ── Option A: shell ──────────────────────────────────────────────────────
+  type: shell
+  command: "echo 0"          # must print a single value to stdout
+  parse:
+    count: "$stdout"         # $stdout maps stdout → variable "count"
+  update_available: "count > 0"
+  interval: 3600             # seconds; default 3600 (1 hour)
+
+  # ── Option B: http ───────────────────────────────────────────────────────
+  # type: http
+  # endpoint: "http://{MY_HOST}/api/version"   # {ENV_VAR} is substituted
+  # auth:
+  #   type: bearer           # none | bearer | basic
+  #   token: "{MY_API_TOKEN}"
+  # parse:
+  #   current: "$.version.current"   # simple $.key.subkey JSONPath
+  #   latest:  "$.version.latest"
+  # update_available: "current != latest"
+
+update:
+  type: shell
+  command: "echo 'update not implemented'"
+  requires_confirmation: true
+
+notifications:
+  changelog: "https://github.com/example/project/releases"

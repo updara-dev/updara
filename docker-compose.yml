@@ -1,0 +1,51 @@
+services:
+  server:
+    build: ./server
+    # host networking: server is directly on the LAN, no Docker NAT.
+    # This lets remote agents (Pi-hole, Proxmox LXCs) reach the server
+    # without port-forwarding issues on nftables-based systems.
+    network_mode: "host"
+    environment:
+      LISTEN_ADDR: ":8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Agent running on this machine (monitors the Docker host itself).
+  # To monitor other hosts, deploy the agent binary there with SERVER_URL pointing here.
+  agent:
+    build: ./agent
+    hostname: "${AGENT_HOSTNAME:-mypc-local}"
+    extra_hosts:
+      - "updara-server:host-gateway"
+    environment:
+      SERVER_URL: "http://updara-server:8080"
+      CONNECTORS_DIR: "/etc/updara/connectors"
+    volumes:
+      - ./connectors:/etc/updara/connectors:ro
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+
+  # Dev mode: vite dev server with hot reload.
+  frontend:
+  # For production, replace with the nginx-based frontend image.
+    image: node:20-alpine
+    working_dir: /app
+    extra_hosts:
+      - "updara-server:host-gateway"
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "4000:4000"
+    command: sh -c "npm install && npm run dev"
+    environment:
+      API_TARGET: "http://updara-server:8080"
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy

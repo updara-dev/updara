@@ -1,0 +1,31 @@
+name: pihole
+display_name: Pi-hole
+icon: pihole.svg
+category: network
+docs: https://pi-hole.net
+
+vars: []  # agent runs on the Pi-hole host — no remote vars needed
+
+# Agent must run on the Pi-hole host itself (no password needed).
+# Deploy the updara-agent binary to the Pi-hole machine and point
+# SERVER_URL to your Updara server.
+check:
+  type: shell
+  command: |
+    current=$(pihole version 2>/dev/null | grep -i 'Core version' | grep -oP 'v[\d.]+' | head -1)
+    latest=$(pihole version 2>/dev/null | grep -i 'Core version' | grep -oP 'v[\d.]+' | tail -1)
+    echo "current=${current:-unknown}"
+    echo "latest=${latest:-unknown}"
+  parse:
+    current: "$current"
+    latest:  "$latest"
+  update_available: "current != latest"
+  interval: 3600
+
+update:
+  type: shell
+  command: "pihole -up"
+  requires_confirmation: true
+
+notifications:
+  changelog: "https://github.com/pi-hole/pi-hole/releases"
