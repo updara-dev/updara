@@ -7,7 +7,7 @@ services:
       - "8080:8080"
     environment:
       LISTEN_ADDR: ":8080"
-      DB_PATH: "/data/updara.json"
+      DB_PATH: "/data/updara.db"
       CONNECTORS_DIR: "/app/connectors"
       BINARIES_DIR: "/app/binaries"
       PUBLIC_URL: "http://10.0.0.244:8080"
