@@ -35,6 +35,12 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/hosts", h.hosts)
 	mux.HandleFunc("GET /api/v1/connectors", h.listConnectors)
 
+	// Update commands
+	mux.HandleFunc("POST /api/v1/hosts/{hostname}/update/{connector}", h.triggerUpdate)
+	mux.HandleFunc("GET /api/v1/hosts/{hostname}/commands/pending", h.pendingCommands)
+	mux.HandleFunc("GET /api/v1/hosts/{hostname}/commands", h.hostCommands)
+	mux.HandleFunc("POST /api/v1/commands/{id}/result", h.commandResult)
+
 	// Host provisioning
 	mux.HandleFunc("POST /api/v1/provisions", h.createProvision)
 	mux.HandleFunc("GET /api/v1/provisions", h.listProvisions)

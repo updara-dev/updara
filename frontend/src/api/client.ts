@@ -47,3 +47,13 @@ export const createProvision = (body: {
 
 export const deleteProvision = (token: string) =>
   request<void>(`/api/v1/provisions/${token}`, { method: 'DELETE' });
+
+import type { Command } from '../types';
+
+export const triggerUpdate = (hostname: string, connector: string) =>
+  request<Command>(`/api/v1/hosts/${encodeURIComponent(hostname)}/update/${connector}`, {
+    method: 'POST',
+  });
+
+export const fetchCommands = (hostname: string) =>
+  request<Command[]>(`/api/v1/hosts/${encodeURIComponent(hostname)}/commands`);

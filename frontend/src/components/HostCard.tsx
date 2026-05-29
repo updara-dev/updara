@@ -38,7 +38,7 @@ export function HostCard({ status }: Props) {
       {Object.entries(byCategory).map(([cat, items]) => (
         <div key={cat} className="host-card__category">
           <h3>{cat}</h3>
-          {items.map(r => <CheckRow key={r.connector} result={r} />)}
+          {items.map(r => <CheckRow key={r.connector} result={r} hostname={host.hostname} />)}
         </div>
       ))}
 

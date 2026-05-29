@@ -179,6 +179,67 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .check-row__changelog:hover { text-decoration: underline; }
 
+.check-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.update-btn {
+  background: #1d4ed8;
+  color: #fff;
+  border: none;
+  padding: 0.25rem 0.625rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.update-btn:hover { background: #1e40af; }
+
+.cmd-status {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cmd-status.pending { color: #94a3b8; }
+.cmd-status.running { color: #f59e0b; }
+.cmd-status.done    { color: var(--color-ok); }
+.cmd-status.failed  { color: var(--color-critical); }
+
+.check-row-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.toggle-output {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.cmd-output {
+  padding: 0.625rem 0.75rem;
+  background: #020617;
+  border-radius: 0 0 0.25rem 0.25rem;
+  border: 1px solid #1e293b;
+  border-top: none;
+  font-family: 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+  font-size: 0.6875rem;
+  color: #94a3b8;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 240px;
+  overflow-y: auto;
+  line-height: 1.6;
+}
+
 /* ── Buttons ─────────────────────────────────────────────── */
 .btn-primary {
   background: #3b82f6;

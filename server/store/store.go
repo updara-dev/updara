@@ -15,6 +15,7 @@ type Store struct {
 	hosts      map[string]*model.Host
 	results    map[string][]model.CheckResult
 	provisions map[string]*model.Provision
+	commands   map[string]*model.Command
 	path       string
 }
 
@@ -22,6 +23,7 @@ type disk struct {
 	Hosts      map[string]*model.Host         `json:"hosts"`
 	Results    map[string][]model.CheckResult `json:"results"`
 	Provisions map[string]*model.Provision    `json:"provisions"`
+	Commands   map[string]*model.Command      `json:"commands"`
 }
 
 func New(path string) *Store {
@@ -29,6 +31,7 @@ func New(path string) *Store {
 		hosts:      make(map[string]*model.Host),
 		results:    make(map[string][]model.CheckResult),
 		provisions: make(map[string]*model.Provision),
+		commands:   make(map[string]*model.Command),
 		path:       path,
 	}
 	s.load()
@@ -57,6 +60,9 @@ func (s *Store) load() {
 	if d.Provisions != nil {
 		s.provisions = d.Provisions
 	}
+	if d.Commands != nil {
+		s.commands = d.Commands
+	}
 	log.Printf("store: loaded %d host(s), %d provision(s)", len(s.hosts), len(s.provisions))
 }
 
@@ -68,6 +74,7 @@ func (s *Store) save() {
 		Hosts:      s.hosts,
 		Results:    s.results,
 		Provisions: s.provisions,
+		Commands:   s.commands,
 	})
 	if err != nil {
 		log.Printf("store: marshal error: %v", err)
@@ -153,4 +160,63 @@ func (s *Store) DeleteProvision(token string) {
 	defer s.mu.Unlock()
 	delete(s.provisions, token)
 	s.save()
+}
+
+// ── Commands ──────────────────────────────────────────────────────────────────
+
+func (s *Store) AddCommand(c model.Command) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.commands[c.ID] = &c
+	s.save()
+}
+
+// ClaimPending returns all pending commands for a host and marks them running.
+func (s *Store) ClaimPending(hostID string) []model.Command {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var out []model.Command
+	now := time.Now()
+	for _, c := range s.commands {
+		if c.HostID == hostID && c.Status == model.CmdStatusPending {
+			c.Status = model.CmdStatusRunning
+			c.UpdatedAt = now
+			out = append(out, *c)
+		}
+	}
+	if len(out) > 0 {
+		s.save()
+	}
+	return out
+}
+
+func (s *Store) FinishCommand(id, status, output string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if c, ok := s.commands[id]; ok {
+		c.Status = status
+		c.Output = output
+		c.UpdatedAt = time.Now()
+	}
+	s.save()
+}
+
+func (s *Store) HostCommands(hostID string) []model.Command {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []model.Command
+	for _, c := range s.commands {
+		if c.HostID == hostID {
+			out = append(out, *c)
+		}
+	}
+	return out
+}
+
+func (s *Store) GetCommand(id string) (*model.Command, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	c, ok := s.commands[id]
+	return c, ok
 }

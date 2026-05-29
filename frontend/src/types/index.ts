@@ -20,3 +20,13 @@ export interface HostStatus {
   host: Host;
   results: CheckResult[];
 }
+
+export interface Command {
+  id: string;
+  host_id: string;
+  connector: string;
+  status: 'pending' | 'running' | 'done' | 'failed';
+  output: string;
+  created_at: string;
+  updated_at: string;
+}
