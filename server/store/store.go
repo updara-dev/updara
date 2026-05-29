@@ -119,9 +119,10 @@ func (s *Store) AllHosts() []model.HostStatus {
 		log.Printf("store: query hosts: %v", err)
 		return nil
 	}
-	defer rows.Close()
 
-	var out []model.HostStatus
+	// Collect all hosts first, then close rows before making nested queries.
+	// (With MaxOpenConns=1, a nested Query while rows is open causes a deadlock.)
+	var hosts []model.Host
 	for rows.Next() {
 		var h model.Host
 		var lastSeen string
@@ -129,6 +130,12 @@ func (s *Store) AllHosts() []model.HostStatus {
 			continue
 		}
 		h.LastSeen, _ = time.Parse(time.RFC3339Nano, lastSeen)
+		hosts = append(hosts, h)
+	}
+	rows.Close()
+
+	var out []model.HostStatus
+	for _, h := range hosts {
 		out = append(out, model.HostStatus{Host: h, Results: s.queryResults(h.ID)})
 	}
 	return out
