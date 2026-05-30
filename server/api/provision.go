@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -222,6 +223,65 @@ func (h *Handler) serveAgentBinary(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="updara-agent"`)
 	http.ServeFile(w, r, path)
+}
+
+// ── Connector YAML management ─────────────────────────────────────────────────
+
+func (h *Handler) getConnectorYAML(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !isValidConnectorName(name) {
+		http.Error(w, "invalid name", http.StatusBadRequest)
+		return
+	}
+	data, err := os.ReadFile(filepath.Join(h.connectorsDir, name+".yaml"))
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Write(data)
+}
+
+func (h *Handler) saveConnector(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !isValidConnectorName(name) {
+		http.Error(w, "invalid name", http.StatusBadRequest)
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	var check any
+	if err := yaml.Unmarshal(body, &check); err != nil {
+		http.Error(w, "invalid YAML: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := os.WriteFile(filepath.Join(h.connectorsDir, name+".yaml"), body, 0644); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) deleteConnector(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !isValidConnectorName(name) {
+		http.Error(w, "invalid name", http.StatusBadRequest)
+		return
+	}
+	if err := os.Remove(filepath.Join(h.connectorsDir, name+".yaml")); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func isValidConnectorName(name string) bool {
+	return name != "" &&
+		!strings.ContainsAny(name, "/\\.") &&
+		!strings.HasPrefix(name, "_")
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

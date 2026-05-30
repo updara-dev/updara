@@ -468,3 +468,233 @@ label > small { font-size: 0.75rem; color: var(--text-muted); }
   justify-content: flex-end;
   gap: 0.75rem;
 }
+
+/* ── Wizard: template hint + search ─────────────────────────── */
+.wizard-template-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #1a3a5c;
+  border: 1px solid #2563eb44;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: #93c5fd;
+}
+.wizard-template-hint strong { color: #bfdbfe; }
+.wizard-template-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3b82f6;
+  flex-shrink: 0;
+}
+
+.wizard-connectors-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.wizard-section-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.wizard-search {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  width: 10rem;
+}
+.wizard-search:focus { outline: none; border-color: #3b82f6; }
+
+.connector-group { margin-bottom: 0.5rem; }
+.connector-group-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  padding: 0.375rem 0 0.25rem;
+}
+
+.connector-card-info { display: flex; flex-direction: column; gap: 0.125rem; flex: 1; }
+.connector-recommended {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #3b82f6;
+  background: #1e3a5f;
+  border: 1px solid #2563eb44;
+  border-radius: 3px;
+  padding: 0 0.3rem;
+  width: fit-content;
+}
+
+/* ── App navigation ──────────────────────────────────────────── */
+.app-nav {
+  display: flex;
+  gap: 0.125rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+}
+.nav-tab {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  padding: 0.3125rem 0.875rem;
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.nav-tab:hover { background: #334155; color: var(--text-primary); }
+.nav-tab.active { background: #3b82f6; color: #fff; }
+
+/* ── Connectors page ─────────────────────────────────────────── */
+.connectors-page { display: flex; flex-direction: column; gap: 1.5rem; }
+
+.connectors-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.connectors-title { font-size: 1.125rem; font-weight: 700; }
+.connectors-subtitle { font-size: 0.8125rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+.connectors-group { display: flex; flex-direction: column; gap: 0.375rem; }
+.connectors-group-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.connectors-table { display: flex; flex-direction: column; gap: 0.375rem; }
+.connectors-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.625rem 0.875rem;
+}
+.connectors-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.125rem; }
+.connectors-row-name { font-size: 0.875rem; font-weight: 500; }
+.connectors-row-id { font-size: 0.6875rem; color: var(--text-muted); font-family: 'Fira Code', monospace; }
+.connectors-row-meta { display: flex; align-items: center; gap: 0.5rem; }
+.connectors-row-vars {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  background: #0f172a;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.125rem 0.375rem;
+}
+.connectors-row-actions { display: flex; gap: 0.375rem; flex-shrink: 0; }
+
+/* ── YAML editor modal ───────────────────────────────────────── */
+.yaml-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+.yaml-editor {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+  width: 100%;
+  max-width: 720px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.yaml-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #334155;
+}
+.yaml-editor-title { font-size: 0.875rem; font-weight: 600; font-family: 'Fira Code', monospace; }
+.yaml-editor-area {
+  flex: 1;
+  min-height: 360px;
+  background: #0b1120;
+  border: none;
+  outline: none;
+  color: #e2e8f0;
+  font-family: 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  padding: 1rem 1.25rem;
+  resize: none;
+  tab-size: 2;
+}
+.yaml-editor-error {
+  padding: 0.5rem 1.25rem;
+  font-size: 0.8125rem;
+  color: var(--color-critical);
+  background: #2d0a0a;
+  border-top: 1px solid #7f1d1d44;
+}
+.yaml-editor-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.625rem;
+  padding: 0.875rem 1.25rem;
+  border-top: 1px solid #334155;
+}
+
+/* ── Danger button ───────────────────────────────────────────── */
+.btn-danger {
+  background: #7f1d1d;
+  color: #fca5a5;
+  border: 1px solid #991b1b44;
+  padding: 0.4rem 0.875rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-size: 0.8125rem;
+}
+.btn-danger:hover { background: #991b1b; color: #fecaca; }
+
+/* ── Confirm dialog ──────────────────────────────────────────── */
+.confirm-dialog {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  max-width: 380px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.confirm-dialog p { font-size: 0.875rem; }
+.confirm-hint { font-size: 0.8125rem; color: var(--text-muted); }
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.625rem;
+  margin-top: 0.5rem;
+}

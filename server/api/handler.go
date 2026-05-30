@@ -47,6 +47,11 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/provisions/{token}", h.deleteProvision)
 	mux.HandleFunc("GET /api/v1/provisions/{token}/config", h.getProvisionConfig)
 
+	// Connector YAML management
+	mux.HandleFunc("GET /api/v1/connectors/{name}/yaml", h.getConnectorYAML)
+	mux.HandleFunc("PUT /api/v1/connectors/{name}", h.saveConnector)
+	mux.HandleFunc("DELETE /api/v1/connectors/{name}", h.deleteConnector)
+
 	// Agent install
 	mux.HandleFunc("GET /install", h.serveInstallScript)
 	mux.HandleFunc("GET /api/v1/agent/binary/{arch}", h.serveAgentBinary)
@@ -85,7 +90,7 @@ func (h *Handler) healthz(w http.ResponseWriter, r *http.Request) {
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

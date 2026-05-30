@@ -1,72 +1,94 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { fetchConnectors, createProvision, type ConnectorMeta } from '../api/client';
 
 interface Props {
   onClose: () => void;
 }
 
-type Step = 1 | 2 | 3;
-
-const HOST_TYPES = [
-  { value: 'lxc',         label: 'LXC / VM',         desc: 'Proxmox LXC or any virtual machine' },
-  { value: 'docker',      label: 'Docker Host',       desc: 'Server running only Docker containers' },
-  { value: 'docker+host', label: 'Docker + Host',     desc: 'Monitors both the OS and Docker' },
-  { value: 'custom',      label: 'Custom',            desc: 'Choose connectors manually' },
+const SERVICE_TEMPLATES: { keywords: string[]; label: string; connectors: string[] }[] = [
+  { keywords: ['pihole', 'pi-hole'],              label: 'Pi-hole',         connectors: ['apt', 'system'] },
+  { keywords: ['adguard', 'adguardhome'],          label: 'AdGuard Home',    connectors: ['apt', 'system'] },
+  { keywords: ['proxmox', 'pve'],                  label: 'Proxmox VE',      connectors: ['apt', 'system'] },
+  { keywords: ['homeassistant', 'home-assistant'], label: 'Home Assistant',  connectors: ['system'] },
+  { keywords: ['nginx', 'caddy', 'traefik'],       label: 'Reverse Proxy',   connectors: ['apt', 'system'] },
+  { keywords: ['docker'],                          label: 'Docker Host',     connectors: ['system'] },
+  { keywords: ['debian', 'ubuntu', 'server'],      label: 'Linux Server',    connectors: ['apt', 'system'] },
 ];
 
-const DEFAULT_CONNECTORS: Record<string, string[]> = {
-  lxc:          ['apt'],
-  docker:       [],
-  'docker+host': ['apt'],
-  custom:       [],
-};
+function detectTemplate(name: string) {
+  const lower = name.toLowerCase();
+  return SERVICE_TEMPLATES.find(t => t.keywords.some(k => lower.includes(k))) ?? null;
+}
+
+function groupByCategory(connectors: ConnectorMeta[]) {
+  const groups: Record<string, ConnectorMeta[]> = {};
+  for (const c of connectors) {
+    const cat = c.category || 'Other';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(c);
+  }
+  return groups;
+}
 
 export function AddHostWizard({ onClose }: Props) {
-  const [step, setStep] = useState<Step>(1);
+  const [step, setStep] = useState<1 | 2>(1);
   const [name, setName] = useState('');
-  const [hostType, setHostType] = useState('lxc');
   const [connectors, setConnectors] = useState<ConnectorMeta[]>([]);
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [selected, setSelected] = useState<Record<string, boolean>>({ apt: true, system: true });
   const [vars, setVars] = useState<Record<string, Record<string, string>>>({});
+  const [search, setSearch] = useState('');
   const [installCmd, setInstallCmd] = useState('');
   const [copied, setCopied] = useState(false);
+  const [lastTemplate, setLastTemplate] = useState<string | null>(null);
 
   useEffect(() => {
     fetchConnectors().then(setConnectors).catch(console.error);
   }, []);
 
-  const handleTypeSelect = (type: string) => {
-    setHostType(type);
-    const defaults = DEFAULT_CONNECTORS[type] ?? [];
-    const sel: Record<string, boolean> = {};
-    defaults.forEach(n => sel[n] = true);
-    setSelected(sel);
-  };
+  // Auto-apply template when name matches a known service
+  useEffect(() => {
+    const tmpl = detectTemplate(name);
+    if (tmpl && tmpl.label !== lastTemplate) {
+      setLastTemplate(tmpl.label);
+      const sel: Record<string, boolean> = {};
+      tmpl.connectors.forEach(n => { sel[n] = true; });
+      setSelected(sel);
+    } else if (!tmpl && lastTemplate) {
+      setLastTemplate(null);
+    }
+  }, [name]);
 
-  const toggleConnector = (name: string) => {
-    setSelected(prev => ({ ...prev, [name]: !prev[name] }));
-  };
+  const template = detectTemplate(name);
+  const templateConnectors = new Set(template?.connectors ?? []);
 
-  const setVar = (connector: string, key: string, value: string) => {
-    setVars(prev => ({
-      ...prev,
-      [connector]: { ...(prev[connector] ?? {}), [key]: value },
-    }));
-  };
+  const filtered = useMemo(() => {
+    if (!search.trim()) return connectors;
+    const q = search.toLowerCase();
+    return connectors.filter(c =>
+      c.name.includes(q) ||
+      (c.display_name ?? '').toLowerCase().includes(q) ||
+      (c.category ?? '').toLowerCase().includes(q),
+    );
+  }, [connectors, search]);
 
-  const handleNext = async () => {
-    if (step === 1) { setStep(2); return; }
-    if (step === 2) {
-      const specs = connectors
-        .filter(c => selected[c.name])
-        .map(c => ({ name: c.name, vars: vars[c.name] ?? {} }));
-      try {
-        const res = await createProvision({ name, host_type: hostType, connectors: specs });
-        setInstallCmd(res.install_cmd);
-        setStep(3);
-      } catch (e) {
-        alert('Error: ' + e);
-      }
+  const groups = useMemo(() => groupByCategory(filtered), [filtered]);
+
+  const toggleConnector = (n: string) =>
+    setSelected(prev => ({ ...prev, [n]: !prev[n] }));
+
+  const setVar = (connector: string, key: string, value: string) =>
+    setVars(prev => ({ ...prev, [connector]: { ...(prev[connector] ?? {}), [key]: value } }));
+
+  const handleGenerate = async () => {
+    const specs = connectors
+      .filter(c => selected[c.name])
+      .map(c => ({ name: c.name, vars: vars[c.name] ?? {} }));
+    try {
+      const res = await createProvision({ name, host_type: 'custom', connectors: specs });
+      setInstallCmd(res.install_cmd);
+      setStep(2);
+    } catch (e) {
+      alert('Error: ' + e);
     }
   };
 
@@ -74,7 +96,6 @@ export function AddHostWizard({ onClose }: Props) {
     try {
       await navigator.clipboard.writeText(installCmd);
     } catch {
-      // Fallback for HTTP (no secure context)
       const el = document.createElement('textarea');
       el.value = installCmd;
       el.style.cssText = 'position:fixed;opacity:0';
@@ -92,21 +113,20 @@ export function AddHostWizard({ onClose }: Props) {
       <div className="wizard">
         <div className="wizard-header">
           <div className="wizard-steps">
-            {(['1', '2', '3'] as const).map((s, i) => (
-              <div key={s} className={`wizard-step ${Number(s) <= step ? 'active' : ''}`}>
+            {([1, 2] as const).map((s, i) => (
+              <div key={s} className={`wizard-step ${s <= step ? 'active' : ''}`}>
                 <span>{s}</span>
-                {i < 2 && <div className="wizard-step-line" />}
+                {i < 1 && <div className="wizard-step-line" />}
               </div>
             ))}
           </div>
           <button className="wizard-close" onClick={onClose}>✕</button>
         </div>
 
-        {/* Step 1: Name + Type */}
         {step === 1 && (
           <div className="wizard-body">
             <h2>Add Host</h2>
-            <p className="wizard-sub">Give the host a name and choose what to monitor.</p>
+
             <label>
               <span>Host name</span>
               <input
@@ -117,92 +137,90 @@ export function AddHostWizard({ onClose }: Props) {
                 autoFocus
               />
             </label>
-            <div className="wizard-types">
-              {HOST_TYPES.map(t => (
-                <button
-                  key={t.value}
-                  className={`type-card ${hostType === t.value ? 'selected' : ''}`}
-                  onClick={() => handleTypeSelect(t.value)}
-                >
-                  <strong>{t.label}</strong>
-                  <span>{t.desc}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
-        {/* Step 2: Connectors */}
-        {step === 2 && (
-          <div className="wizard-body">
-            <h2>Choose Connectors</h2>
-            <p className="wizard-sub">Select what to monitor on <strong>{name}</strong>.</p>
+            {template && (
+              <div className="wizard-template-hint">
+                <span className="wizard-template-dot" />
+                <span>Erkannt: <strong>{template.label}</strong> — empfohlene Connectors vorausgewählt</span>
+              </div>
+            )}
+
+            <div className="wizard-connectors-header">
+              <span className="wizard-section-label">Connectors</span>
+              <input
+                className="wizard-search"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Suchen…"
+              />
+            </div>
+
             <div className="connector-list">
-              {connectors.map(c => (
-                <div key={c.name} className={`connector-card ${selected[c.name] ? 'selected' : ''}`}>
-                  <div className="connector-card-top" onClick={() => toggleConnector(c.name)}>
-                    <div className="connector-card-check">{selected[c.name] ? '✅' : '☐'}</div>
-                    <div>
-                      <strong>{c.display_name || c.name}</strong>
-                      <span className="connector-category">{c.category}</span>
+              {Object.entries(groups).map(([category, items]) => (
+                <div key={category} className="connector-group">
+                  <div className="connector-group-label">{category}</div>
+                  {items.map(c => (
+                    <div key={c.name} className={`connector-card ${selected[c.name] ? 'selected' : ''}`}>
+                      <div className="connector-card-top" onClick={() => toggleConnector(c.name)}>
+                        <div className="connector-card-check">{selected[c.name] ? '✅' : '☐'}</div>
+                        <div className="connector-card-info">
+                          <strong>{c.display_name || c.name}</strong>
+                          {templateConnectors.has(c.name) && (
+                            <span className="connector-recommended">Empfohlen</span>
+                          )}
+                        </div>
+                      </div>
+                      {selected[c.name] && (c.vars ?? []).length > 0 && (
+                        <div className="connector-vars">
+                          {c.vars.map(v => (
+                            <label key={v.name}>
+                              <span>{v.name}{v.required && ' *'}</span>
+                              {v.description && <small>{v.description}</small>}
+                              <input
+                                className="wizard-input"
+                                value={vars[c.name]?.[v.name] ?? v.default ?? ''}
+                                onChange={e => setVar(c.name, v.name, e.target.value)}
+                                placeholder={v.default || v.name}
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  {selected[c.name] && (c.vars ?? []).length > 0 && (
-                    <div className="connector-vars">
-                      {c.vars.map(v => (
-                        <label key={v.name}>
-                          <span>{v.name}{v.required && ' *'}</span>
-                          {v.description && <small>{v.description}</small>}
-                          <input
-                            className="wizard-input"
-                            value={vars[c.name]?.[v.name] ?? v.default ?? ''}
-                            onChange={e => setVar(c.name, v.name, e.target.value)}
-                            placeholder={v.default || v.name}
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  )}
+                  ))}
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Step 3: Install command */}
-        {step === 3 && (
+        {step === 2 && (
           <div className="wizard-body">
-            <h2>Run on <strong>{name}</strong></h2>
-            <p className="wizard-sub">Copy and run this command on the target host (as root):</p>
+            <h2>Auf <strong>{name}</strong> ausführen</h2>
+            <p className="wizard-sub">Diesen Befehl als root auf dem Ziel-Host kopieren und ausführen:</p>
             <div className="install-box">
               <code>{installCmd}</code>
               <button className="copy-btn" onClick={copy}>
-                {copied ? '✓ Copied' : 'Copy'}
+                {copied ? '✓ Kopiert' : 'Kopieren'}
               </button>
             </div>
             <p className="wizard-hint">
-              The agent will install itself, start automatically, and appear in the dashboard within a minute.
+              Der Agent installiert sich selbst, startet automatisch und erscheint innerhalb einer Minute im Dashboard.
             </p>
           </div>
         )}
 
         <div className="wizard-footer">
-          {step > 1 && step < 3 && (
-            <button className="btn-secondary" onClick={() => setStep(s => (s - 1) as Step)}>
-              Back
+          {step === 2 && (
+            <button className="btn-secondary" onClick={() => setStep(1)}>Zurück</button>
+          )}
+          {step === 1 && (
+            <button className="btn-primary" onClick={handleGenerate} disabled={!name.trim()}>
+              Installationsbefehl generieren
             </button>
           )}
-          {step < 3 && (
-            <button
-              className="btn-primary"
-              onClick={handleNext}
-              disabled={step === 1 && !name.trim()}
-            >
-              {step === 2 ? 'Generate Install Command' : 'Next'}
-            </button>
-          )}
-          {step === 3 && (
-            <button className="btn-primary" onClick={onClose}>Done</button>
+          {step === 2 && (
+            <button className="btn-primary" onClick={onClose}>Fertig</button>
           )}
         </div>
       </div>

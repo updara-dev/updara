@@ -1,4 +1,4 @@
-import type { HostStatus } from '../types';
+import type { HostStatus, Command } from '../types';
 
 const BASE = import.meta.env.VITE_SERVER_URL ?? '';
 
@@ -48,7 +48,21 @@ export const createProvision = (body: {
 export const deleteProvision = (token: string) =>
   request<void>(`/api/v1/provisions/${token}`, { method: 'DELETE' });
 
-import type { Command } from '../types';
+export const fetchConnectorYAML = async (name: string): Promise<string> => {
+  const res = await fetch(`${BASE}/api/v1/connectors/${encodeURIComponent(name)}/yaml`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.text();
+};
+
+export const saveConnectorYAML = (name: string, yaml: string) =>
+  request<void>(`/api/v1/connectors/${encodeURIComponent(name)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'text/plain' },
+    body: yaml,
+  });
+
+export const deleteConnector = (name: string) =>
+  request<void>(`/api/v1/connectors/${encodeURIComponent(name)}`, { method: 'DELETE' });
 
 export const triggerUpdate = (hostname: string, connector: string) =>
   request<Command>(`/api/v1/hosts/${encodeURIComponent(hostname)}/update/${connector}`, {
