@@ -800,12 +800,12 @@ label > small { font-size: 0.75rem; color: var(--text-muted); }
 /* ── Vars Edit Dialog ─────────────────────────────────────── */
 .vars-dialog-overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.6);
+  background: rgba(0,0,0,0.8);
   display: flex; align-items: center; justify-content: center;
   z-index: 100;
 }
 .vars-dialog {
-  background: var(--surface);
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 8px;
   width: min(520px, 95vw);
@@ -836,7 +836,7 @@ label > small { font-size: 0.75rem; color: var(--text-muted); }
 .vars-dialog__var-desc { font-size: 0.75rem; color: var(--text-muted); }
 .vars-dialog__input {
   width: 100%; box-sizing: border-box;
-  background: var(--bg); border: 1px solid var(--border);
+  background: var(--bg-base); border: 1px solid var(--border);
   color: var(--text-primary); border-radius: 4px;
   padding: 0.4rem 0.6rem; font-size: 0.875rem; font-family: 'Fira Code', monospace;
 }

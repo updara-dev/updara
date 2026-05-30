@@ -5,11 +5,11 @@ docs: https://docs.docker.com
 
 vars:
   - name: DOCKER_EXCLUDE_STACKS
-    description: "Comma-separated compose project names to hide (e.g. traefik,portainer)"
+    description: "Compose project names to hide — comma-separated (e.g. traefik,portainer)"
     required: false
     default: ""
   - name: DOCKER_EXTRA_COMPOSE_DIRS
-    description: "Additional directories to scan for docker-compose.yml (comma-separated)"
+    description: "Absolute paths to scan for docker-compose.yml — comma-separated (e.g. /opt/mystack,/srv/apps)"
     required: false
     default: ""
 
