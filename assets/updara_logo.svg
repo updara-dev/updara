@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" width="320" height="80">
+  <title>Updara Logo</title>
+  <rect x="0" y="0" width="320" height="80" rx="14" fill="#0B1630"/>
+  <!-- mini radar (left side) -->
+  <circle cx="44" cy="40" r="26" fill="none" stroke="#93C5FD" stroke-width="1"   opacity="0.25"/>
+  <circle cx="44" cy="40" r="17" fill="none" stroke="#93C5FD" stroke-width="1"   opacity="0.35"/>
+  <circle cx="44" cy="40" r="9"  fill="none" stroke="#93C5FD" stroke-width="1.2" opacity="0.45"/>
+  <!-- sweep fill -->
+  <path d="M44 40 L44 14 A26 26 0 0 1 70 40 Z" fill="#F97316" opacity="0.14"/>
+  <!-- sweep arm -->
+  <line x1="44" y1="40" x2="44" y2="14" stroke="#F97316" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- center dot -->
+  <circle cx="44" cy="40" r="3.5" fill="#F97316"/>
+  <!-- blips -->
+  <circle cx="62" cy="24" r="4"   fill="#F97316"/>
+  <circle cx="62" cy="24" r="7.5" fill="#F97316" opacity="0.2"/>
+  <circle cx="28" cy="28" r="2.5" fill="#93C5FD" opacity="0.65"/>
+  <!-- divider -->
+  <line x1="84" y1="16" x2="84" y2="64" stroke="#F97316" stroke-width="0.6" opacity="0.25"/>
+  <!-- wordmark -->
+  <text x="186" y="50" font-family="sans-serif" font-size="28" font-weight="700" fill="#F97316" text-anchor="middle" letter-spacing="2">updara</text>
+</svg>

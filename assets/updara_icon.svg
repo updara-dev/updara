@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 136 136" width="136" height="136">
+  <title>Updara Icon</title>
+  <rect x="0" y="0" width="136" height="136" rx="28" fill="#0B1630"/>
+  <!-- crosshairs -->
+  <line x1="16" y1="68" x2="120" y2="68" stroke="#93C5FD" stroke-width="0.5" opacity="0.15"/>
+  <line x1="68" y1="16" x2="68" y2="120" stroke="#93C5FD" stroke-width="0.5" opacity="0.15"/>
+  <!-- rings (blue) -->
+  <circle cx="68" cy="68" r="50" fill="none" stroke="#93C5FD" stroke-width="1"   opacity="0.25"/>
+  <circle cx="68" cy="68" r="34" fill="none" stroke="#93C5FD" stroke-width="1"   opacity="0.35"/>
+  <circle cx="68" cy="68" r="18" fill="none" stroke="#93C5FD" stroke-width="1.2" opacity="0.45"/>
+  <!-- sweep fill (orange) -->
+  <path d="M68 68 L68 18 A50 50 0 0 1 118 68 Z" fill="#F97316" opacity="0.14"/>
+  <!-- sweep arm (orange) -->
+  <line x1="68" y1="68" x2="68" y2="18" stroke="#F97316" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- center dot -->
+  <circle cx="68" cy="68" r="4" fill="#F97316"/>
+  <!-- blips -->
+  <circle cx="98" cy="34" r="5"  fill="#F97316"/>
+  <circle cx="98" cy="34" r="9"  fill="#F97316" opacity="0.2"/>
+  <circle cx="46" cy="38" r="3.5" fill="#93C5FD" opacity="0.7"/>
+  <circle cx="110" cy="80" r="2.5" fill="#93C5FD" opacity="0.4"/>
+</svg>
