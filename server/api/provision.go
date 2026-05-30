@@ -187,7 +187,13 @@ case "$ARCH" in
 esac
 
 echo "[Updara] Downloading agent ($GOARCH)..."
-curl -fsSL "$SERVER_URL/api/v1/agent/binary/$GOARCH" -o /usr/local/bin/updara-agent
+if command -v curl >/dev/null 2>&1; then
+  curl -fsSL "$SERVER_URL/api/v1/agent/binary/$GOARCH" -o /usr/local/bin/updara-agent
+elif command -v wget >/dev/null 2>&1; then
+  wget -qO /usr/local/bin/updara-agent "$SERVER_URL/api/v1/agent/binary/$GOARCH"
+else
+  echo "[Updara] Error: curl or wget is required"; exit 1
+fi
 chmod +x /usr/local/bin/updara-agent
 
 mkdir -p /etc/updara/connectors

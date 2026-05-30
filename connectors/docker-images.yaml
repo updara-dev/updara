@@ -1,0 +1,104 @@
+name: docker-images
+display_name: Docker Images
+category: infrastructure
+docs: https://docs.docker.com
+
+vars: []
+
+# Checks all running containers against Docker Hub for image updates.
+# Compares local image digest with remote manifest digest.
+# Auto-discovers docker-compose.yml locations for updates.
+# Only supports public Docker Hub images (ghcr.io etc. are skipped silently).
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, json, sys, os
+    try:
+        from urllib.request import urlopen, Request
+    except ImportError:
+        print("count=0")
+        sys.exit(0)
+
+    # Auto-discover docker-compose.yml files
+    find_result = subprocess.run(
+        ['find', '/opt', '/root', '/home', '/srv', '/docker',
+         '-maxdepth', '4', '-name', 'docker-compose.yml', '-o', '-name', 'docker-compose.yaml'],
+        capture_output=True, text=True
+    )
+    compose_dirs = list({os.path.dirname(p) for p in find_result.stdout.strip().split('\n') if p})
+
+    # Check running containers for updates
+    result = subprocess.run(
+        ['docker', 'ps', '--format', '{{.Names}}\t{{.Image}}'],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        print("count=0")
+        sys.exit(0)
+
+    outdated = []
+    for line in result.stdout.strip().split('\n'):
+        if '\t' not in line:
+            continue
+        cname, image = line.split('\t', 1)
+
+        # Skip non-Docker-Hub images (ghcr.io, quay.io, custom registries)
+        if '.' in image.split('/')[0]:
+            continue
+
+        repo, tag = (image.rsplit(':', 1) if ':' in image.split('/')[-1] else (image, 'latest'))
+        if '/' not in repo:
+            repo = 'library/' + repo
+
+        try:
+            token_url = f'https://auth.docker.io/token?service=registry.docker.io&scope=repository:{repo}:pull'
+            token = json.loads(urlopen(token_url, timeout=10).read())['token']
+
+            req = Request(
+                f'https://registry-1.docker.io/v2/{repo}/manifests/{tag}',
+                headers={
+                    'Authorization': f'Bearer {token}',
+                    'Accept': 'application/vnd.docker.distribution.manifest.v2+json',
+                }
+            )
+            resp = urlopen(req, timeout=10)
+            remote_digest = resp.headers.get('Docker-Content-Digest', '')
+
+            local = subprocess.run(
+                ['docker', 'inspect', '--format', '{{index .RepoDigests 0}}', image],
+                capture_output=True, text=True
+            ).stdout.strip()
+
+            if remote_digest and local and remote_digest not in local:
+                outdated.append(cname)
+        except Exception:
+            pass
+
+    print(f'count={len(outdated)}')
+    if outdated:
+        print(f'outdated={",".join(outdated)}')
+    if compose_dirs:
+        print(f'compose_dirs={",".join(sorted(compose_dirs))}')
+    PYEOF
+  parse:
+    count:        "$count"
+    outdated:     "$outdated"
+    compose_dirs: "$compose_dirs"
+  update_available: "count > 0"
+  interval: 3600
+
+update:
+  type: shell
+  # Auto-discovers all docker-compose.yml locations and updates each stack.
+  command: |
+    find /opt /root /home /srv /docker -maxdepth 4 \( -name "docker-compose.yml" -o -name "docker-compose.yaml" \) 2>/dev/null \
+      | xargs -I{} dirname {} | sort -u \
+      | while read dir; do
+          echo "[Updara] Updating stack in $dir"
+          cd "$dir" && docker compose pull && docker compose up -d
+        done
+  requires_confirmation: true
+
+notifications:
+  changelog: ""

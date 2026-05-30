@@ -12,7 +12,7 @@ const SERVICE_TEMPLATES: { keywords: string[]; label: string; connectors: string
   { keywords: ['proxmox', 'pve'],                  label: 'Proxmox VE',      connectors: ['apt', 'system'] },
   { keywords: ['homeassistant', 'home-assistant'], label: 'Home Assistant',  connectors: ['system'] },
   { keywords: ['nginx', 'caddy', 'traefik'],       label: 'Reverse Proxy',   connectors: ['apt', 'system'] },
-  { keywords: ['docker'],                          label: 'Docker Host',     connectors: ['system'] },
+  { keywords: ['docker'],                          label: 'Docker Host',     connectors: ['system', 'docker-images'] },
   { keywords: ['debian', 'ubuntu', 'server'],      label: 'Linux Server',    connectors: ['apt', 'system'] },
 ];
 
