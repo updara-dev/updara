@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { fetchHostDetail, ignoreConnector, unignoreConnector, triggerUpdate, fetchCommands } from '../api/client';
+import { fetchHostDetail, ignoreConnector, unignoreConnector, triggerUpdate, fetchCommands, removeHostConnector, deleteHost } from '../api/client';
 import { useT } from '../i18n';
 import type { HostDetail, CheckResult, Command } from '../types';
 
@@ -63,10 +63,12 @@ function ResultRow({
   result,
   hostname,
   onToggleIgnore,
+  onRemove,
 }: {
   result: CheckResult;
   hostname: string;
   onToggleIgnore: (connector: string, item: string | undefined, ignored: boolean) => Promise<void>;
+  onRemove: (connector: string) => Promise<void>;
 }) {
   const { t } = useT();
   const [busy, setBusy] = useState(false);
@@ -145,6 +147,15 @@ function ResultRow({
             {hasComposeUpdates && !cmd && (
               <button className="update-btn" onClick={handleUpdate}>{t.checkRow.update}</button>
             )}
+            <button
+              className="remove-connector-btn"
+              title={t.hostDetail.removeConnector}
+              onClick={() => {
+                if (window.confirm(t.hostDetail.confirmRemoveConnector(result.display_name || result.connector))) {
+                  onRemove(result.connector);
+                }
+              }}
+            >✕</button>
           </div>
         )}
         {!hasContainerView && (
@@ -163,6 +174,15 @@ function ResultRow({
             >
               {result.ignored ? t.hostDetail.unignore : t.hostDetail.ignore}
             </button>
+            <button
+              className="remove-connector-btn"
+              title={t.hostDetail.removeConnector}
+              onClick={() => {
+                if (window.confirm(t.hostDetail.confirmRemoveConnector(result.display_name || result.connector))) {
+                  onRemove(result.connector);
+                }
+              }}
+            >✕</button>
           </div>
         )}
       </div>
@@ -253,6 +273,17 @@ export function HostDetailPage({ hostname, onBack }: Props) {
     await load();
   };
 
+  const handleRemove = async (connector: string) => {
+    await removeHostConnector(hostname, connector);
+    await load();
+  };
+
+  const handleDeleteHost = async () => {
+    if (!window.confirm(t.hostDetail.confirmDeleteHost(hostname))) return;
+    await deleteHost(hostname);
+    onBack();
+  };
+
   if (!detail && !error) {
     return <p className="status-msg">Loading…</p>;
   }
@@ -280,9 +311,14 @@ export function HostDetailPage({ hostname, onBack }: Props) {
 
   return (
     <div className="host-detail">
-      <button className="host-detail__back" onClick={onBack}>
-        {t.hostDetail.back}
-      </button>
+      <div className="host-detail__topbar">
+        <button className="host-detail__back" onClick={onBack}>
+          {t.hostDetail.back}
+        </button>
+        <button className="delete-host-btn" onClick={handleDeleteHost}>
+          {t.hostDetail.deleteHost}
+        </button>
+      </div>
 
       <div className="host-detail__header">
         <div className="host-detail__title">
@@ -307,6 +343,7 @@ export function HostDetailPage({ hostname, onBack }: Props) {
                 result={r}
                 hostname={hostname}
                 onToggleIgnore={handleToggleIgnore}
+                onRemove={handleRemove}
               />
             ))}
           </div>

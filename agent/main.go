@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -116,6 +117,9 @@ func main() {
 
 		if len(results) > 0 {
 			if err := rep.Send(results); err != nil {
+				if errors.Is(err, reporter.ErrHostDeleted) {
+					selfUninstall()
+				}
 				log.Printf("report failed: %v", err)
 			} else {
 				log.Printf("Reported %d result(s) to %s", len(results), serverURL)
@@ -298,6 +302,19 @@ func syncConnectors(serverURL, connDir string, connectors []connector.Connector)
 		}
 	}
 	return changed
+}
+
+func selfUninstall() {
+	log.Printf("host deleted on server — uninstalling agent")
+	exec.Command("systemctl", "disable", "updara-agent").Run()
+	os.Remove("/etc/systemd/system/updara-agent.service")
+	exec.Command("systemctl", "daemon-reload").Run()
+	os.RemoveAll("/etc/updara")
+	// Remove own binary after exit (run in background so this process can exit cleanly)
+	exe, _ := os.Executable()
+	exec.Command("sh", "-c", fmt.Sprintf("sleep 2; rm -f %q", exe)).Start()
+	log.Printf("uninstall complete")
+	os.Exit(0)
 }
 
 func localIP() string {

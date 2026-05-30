@@ -3,12 +3,15 @@ package reporter
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/updara/agent/runner"
 )
+
+var ErrHostDeleted = errors.New("host deleted on server")
 
 type Reporter struct {
 	serverURL    string
@@ -60,6 +63,9 @@ func (r *Reporter) Send(results []runner.Result) error {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrHostDeleted
+	}
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("server returned %d", resp.StatusCode)
 	}

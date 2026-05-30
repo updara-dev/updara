@@ -749,16 +749,32 @@ label > small { font-size: 0.75rem; color: var(--text-muted); }
   margin: 0 auto;
 }
 
+.host-detail__topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
 .host-detail__back {
   background: none;
   border: none;
   color: var(--text-secondary);
   padding: 0;
-  margin-bottom: 1.5rem;
   font-size: 0.875rem;
   cursor: pointer;
 }
 .host-detail__back:hover { color: var(--text-primary); background: none; }
+
+.delete-host-btn {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  color: var(--text-muted);
+  border-color: transparent;
+  background: transparent;
+  opacity: 0.45;
+}
+.delete-host-btn:hover { color: var(--color-critical); border-color: var(--color-critical); opacity: 1; background: #2a0a0a; }
 
 .host-detail__header { margin-bottom: 2rem; }
 
@@ -899,6 +915,17 @@ label > small { font-size: 0.75rem; color: var(--text-muted); }
   background: #0f2240;
 }
 .unignore-btn:hover { background: #1e3a5f; }
+
+.remove-connector-btn {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.45rem;
+  color: var(--text-muted);
+  border-color: transparent;
+  background: transparent;
+  opacity: 0.5;
+  line-height: 1;
+}
+.remove-connector-btn:hover { color: var(--color-critical); border-color: var(--color-critical); opacity: 1; background: #2a0a0a; }
 
 /* ── Command history ─────────────────────────────────────── */
 .command-history {

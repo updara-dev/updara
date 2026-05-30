@@ -58,6 +58,10 @@ export const en: Translations = {
     noCommands: 'No commands yet.',
     showOutput: 'Show output',
     hideOutput: 'Hide output',
+    removeConnector: 'Remove',
+    confirmRemoveConnector: (name) => `Remove connector "${name}" from this host? The agent will delete the connector file on next sync.`,
+    deleteHost: 'Delete Host',
+    confirmDeleteHost: (name) => `Permanently delete host "${name}" and all its data?`,
   },
   connectors: {
     title: 'Connectors',

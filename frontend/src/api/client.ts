@@ -84,3 +84,11 @@ export const unignoreConnector = (hostname: string, connector: string, item?: st
   request<void>(`/api/v1/hosts/${encodeURIComponent(hostname)}/ignore/${encodeURIComponent(connector)}${item != null ? `?item=${encodeURIComponent(item)}` : ''}`, {
     method: 'DELETE',
   });
+
+export const removeHostConnector = (hostname: string, connector: string) =>
+  request<void>(`/api/v1/hosts/${encodeURIComponent(hostname)}/connectors/${encodeURIComponent(connector)}`, {
+    method: 'DELETE',
+  });
+
+export const deleteHost = (hostname: string) =>
+  request<void>(`/api/v1/hosts/${encodeURIComponent(hostname)}`, { method: 'DELETE' });

@@ -299,6 +299,62 @@ func (h *Handler) deleteConnector(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// DELETE /api/v1/hosts/{hostname}
+func (h *Handler) deleteHost(w http.ResponseWriter, r *http.Request) {
+	hostname := r.PathValue("hostname")
+
+	// DeleteHost first (clears all existing commands + adds tombstone)
+	h.store.DeleteHost(hostname)
+
+	// Queue self-destruct AFTER delete so it isn't swept up by DeleteHost.
+	// Disables+removes service files, connector dir, then stops the running agent
+	// process after a 5s delay (gives agent time to execute and post the result).
+	uninstallCmd := strings.Join([]string{
+		`systemctl disable updara-agent 2>/dev/null`,
+		`rm -f /etc/systemd/system/updara-agent.service`,
+		`systemctl daemon-reload 2>/dev/null`,
+		`rm -rf /etc/updara`,
+		`nohup sh -c 'sleep 5; systemctl stop updara-agent 2>/dev/null; rm -f /usr/local/bin/updara-agent' >/dev/null 2>&1 &`,
+	}, "; ")
+	b := make([]byte, 8)
+	rand.Read(b)
+	h.store.AddCommand(model.Command{
+		ID:        hex.EncodeToString(b),
+		HostID:    hostname,
+		Connector: "_uninstall",
+		Cmd:       uninstallCmd,
+		Status:    model.CmdStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	})
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// DELETE /api/v1/hosts/{hostname}/connectors/{connector}
+func (h *Handler) deleteHostConnector(w http.ResponseWriter, r *http.Request) {
+	hostname := r.PathValue("hostname")
+	connector := r.PathValue("connector")
+	if !isValidConnectorName(connector) {
+		http.Error(w, "invalid connector name", http.StatusBadRequest)
+		return
+	}
+	deleteCmd := fmt.Sprintf("rm -f /etc/updara/connectors/%s.yaml", connector)
+	b := make([]byte, 8)
+	rand.Read(b)
+	h.store.AddCommand(model.Command{
+		ID:        hex.EncodeToString(b),
+		HostID:    hostname,
+		Connector: connector,
+		Cmd:       deleteCmd,
+		Status:    model.CmdStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	})
+	h.store.DeleteHostConnector(hostname, connector)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func isValidConnectorName(name string) bool {
 	return name != "" &&
 		!strings.ContainsAny(name, "/\\.") &&

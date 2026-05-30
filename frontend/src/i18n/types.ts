@@ -56,6 +56,10 @@ export interface Translations {
     noCommands: string;
     showOutput: string;
     hideOutput: string;
+    removeConnector: string;
+    confirmRemoveConnector: (name: string) => string;
+    deleteHost: string;
+    confirmDeleteHost: (name: string) => string;
   };
   connectors: {
     title: string;

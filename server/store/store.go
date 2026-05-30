@@ -71,6 +71,17 @@ CREATE TABLE IF NOT EXISTS ignored_items (
     PRIMARY KEY (host_id, connector, item)
 );
 
+CREATE TABLE IF NOT EXISTS disabled_connectors (
+    host_id   TEXT NOT NULL,
+    connector TEXT NOT NULL,
+    PRIMARY KEY (host_id, connector)
+);
+
+CREATE TABLE IF NOT EXISTS deleted_hosts (
+    host_id    TEXT PRIMARY KEY,
+    deleted_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_results_host    ON results(host_id);
 CREATE INDEX IF NOT EXISTS idx_commands_host   ON commands(host_id);
 CREATE INDEX IF NOT EXISTS idx_commands_status ON commands(status);
@@ -114,6 +125,12 @@ func (s *Store) Upsert(req model.ReportRequest) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	var deleted int
+	s.db.QueryRow(`SELECT COUNT(*) FROM deleted_hosts WHERE host_id=?`, req.Hostname).Scan(&deleted)
+	if deleted > 0 {
+		return
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := s.db.Exec(`
 		INSERT INTO hosts (id, hostname, ip_address, agent_version, last_seen) VALUES (?,?,?,?,?)
@@ -127,8 +144,12 @@ func (s *Store) Upsert(req model.ReportRequest) {
 		return
 	}
 
+	disabled := s.fetchDisabled(req.Hostname)
 	s.db.Exec(`DELETE FROM results WHERE host_id = ?`, req.Hostname)
 	for _, r := range req.Results {
+		if disabled[r.Connector] {
+			continue
+		}
 		valJSON, _ := json.Marshal(r.Values)
 		upd := 0
 		if r.UpdateAvailable {
@@ -141,6 +162,29 @@ func (s *Store) Upsert(req model.ReportRequest) {
 		`, req.Hostname, r.Connector, r.DisplayName, r.Category, string(valJSON),
 			upd, r.Changelog, r.Error, r.CheckedAt.UTC().Format(time.RFC3339Nano))
 	}
+}
+
+func (s *Store) IsDeleted(hostname string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var count int
+	s.db.QueryRow(`SELECT COUNT(*) FROM deleted_hosts WHERE host_id=?`, hostname).Scan(&count)
+	return count > 0
+}
+
+func (s *Store) fetchDisabled(hostID string) map[string]bool {
+	rows, err := s.db.Query(`SELECT connector FROM disabled_connectors WHERE host_id=?`, hostID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var c string
+		rows.Scan(&c)
+		out[c] = true
+	}
+	return out
 }
 
 func (s *Store) AllHosts() []model.HostStatus {
@@ -339,6 +383,8 @@ func (s *Store) ClaimProvision(token, hostname string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.db.Exec(`UPDATE provisions SET claimed_by=? WHERE token=?`, hostname, token)
+	// Re-provisioning the same hostname clears any tombstone from a previous delete
+	s.db.Exec(`DELETE FROM deleted_hosts WHERE host_id=?`, hostname)
 }
 
 func (s *Store) AllProvisions() []model.Provision {
@@ -437,6 +483,26 @@ func (s *Store) HostCommands(hostID string) []model.Command {
 		out = append(out, c)
 	}
 	return out
+}
+
+func (s *Store) DeleteHostConnector(hostID, connector string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.db.Exec(`INSERT OR REPLACE INTO disabled_connectors (host_id, connector) VALUES (?,?)`, hostID, connector)
+	s.db.Exec(`DELETE FROM results WHERE host_id=? AND connector=?`, hostID, connector)
+	s.db.Exec(`DELETE FROM ignored_items WHERE host_id=? AND connector=?`, hostID, connector)
+}
+
+func (s *Store) DeleteHost(hostname string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	s.db.Exec(`INSERT OR REPLACE INTO deleted_hosts (host_id, deleted_at) VALUES (?,?)`, hostname, now)
+	s.db.Exec(`DELETE FROM hosts WHERE id=?`, hostname)
+	s.db.Exec(`DELETE FROM results WHERE host_id=?`, hostname)
+	s.db.Exec(`DELETE FROM ignored_items WHERE host_id=?`, hostname)
+	s.db.Exec(`DELETE FROM disabled_connectors WHERE host_id=?`, hostname)
+	s.db.Exec(`DELETE FROM commands WHERE host_id=? AND status='pending'`, hostname)
 }
 
 func (s *Store) GetCommand(id string) (*model.Command, bool) {

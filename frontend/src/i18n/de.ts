@@ -58,6 +58,10 @@ export const de: Translations = {
     noCommands: 'Noch keine Befehle.',
     showOutput: 'Ausgabe anzeigen',
     hideOutput: 'Ausgabe verbergen',
+    removeConnector: 'Entfernen',
+    confirmRemoveConnector: (name) => `Connector "${name}" von diesem Host entfernen? Der Agent löscht die Connector-Datei beim nächsten Sync.`,
+    deleteHost: 'Host löschen',
+    confirmDeleteHost: (name) => `Host "${name}" und alle Daten dauerhaft löschen?`,
   },
   connectors: {
     title: 'Connectors',

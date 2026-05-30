@@ -42,6 +42,12 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/hosts/{hostname}/commands", h.hostCommands)
 	mux.HandleFunc("POST /api/v1/commands/{id}/result", h.commandResult)
 
+	// Host management
+	mux.HandleFunc("DELETE /api/v1/hosts/{hostname}", h.deleteHost)
+
+	// Per-host connector removal
+	mux.HandleFunc("DELETE /api/v1/hosts/{hostname}/connectors/{connector}", h.deleteHostConnector)
+
 	// Ignore rules
 	mux.HandleFunc("POST /api/v1/hosts/{hostname}/ignore/{connector}", h.ignoreConnector)
 	mux.HandleFunc("DELETE /api/v1/hosts/{hostname}/ignore/{connector}", h.unignoreConnector)
@@ -73,7 +79,13 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If agent reports with a token, claim the provision
+	// Tell deleted agents to uninstall themselves
+	if req.Token == "" && h.store.IsDeleted(req.Hostname) {
+		http.Error(w, "host deleted", http.StatusNotFound)
+		return
+	}
+
+	// If agent reports with a token, claim the provision (clears any tombstone)
 	if req.Token != "" {
 		h.store.ClaimProvision(req.Token, req.Hostname)
 	}
@@ -100,6 +112,9 @@ func (h *Handler) hostDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cmds := h.store.HostCommands(hostname)
+	if cmds == nil {
+		cmds = []model.Command{}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"host":     status.Host,
