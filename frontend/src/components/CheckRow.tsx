@@ -6,13 +6,15 @@ import { useT } from '../i18n';
 interface Props {
   result: CheckResult;
   hostname: string;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }
 
 function stripAnsi(str: string): string {
   return str.replace(/\x1b\[[0-9;?]*[a-zA-Z]|\r/g, '').trim();
 }
 
-export function CheckRow({ result, hostname }: Props) {
+export function CheckRow({ result, hostname, isSelected, onToggleSelect }: Props) {
   const { t } = useT();
   const [cmd, setCmd] = useState<Command | null>(null);
   const [showOutput, setShowOutput] = useState(false);
@@ -66,9 +68,20 @@ export function CheckRow({ result, hostname }: Props) {
       );
   };
 
+  const showCheckbox = result.update_available && !result.ignored && !cmd && !!onToggleSelect;
+
   return (
     <div className="check-row-wrapper">
       <div className={`check-row check-row--${state}`}>
+        {showCheckbox && (
+          <input
+            type="checkbox"
+            className="check-row__checkbox"
+            checked={isSelected ?? false}
+            onChange={e => { e.stopPropagation(); onToggleSelect?.(); }}
+            onClick={e => e.stopPropagation()}
+          />
+        )}
         <span className="check-row__icon">{icon}</span>
         <div className="check-row__body">
           <span className="check-row__name">{result.display_name || result.connector}</span>

@@ -16,6 +16,10 @@ export const en: Translations = {
     noHosts: 'No hosts reporting yet.',
     noHostsHint: 'Deploy an agent and point it to this server to get started.',
     noChecks: 'No checks reported yet.',
+    selectAll: 'Select all updates',
+    deselectAll: 'Deselect all',
+    bulkUpdate: (n) => `Update ${n} selected`,
+    bulkTriggered: (n) => `✅ ${n} update${n > 1 ? 's' : ''} triggered`,
   },
   checkRow: {
     pending: 'Pending…',

@@ -142,6 +142,55 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .host-card__empty { font-size: 0.8125rem; color: var(--text-muted); text-align: center; padding: 0.5rem; }
 
 /* ── Check row ───────────────────────────────────────────── */
+.bulk-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.75rem;
+}
+.bulk-select-all-btn {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+.bulk-select-all-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
+
+.bulk-update-bar {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 2rem;
+  padding: 0.6rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  z-index: 50;
+  min-width: 260px;
+  justify-content: center;
+}
+.bulk-update-bar__count { font-size: 0.875rem; color: var(--text-secondary); }
+.bulk-update-bar__triggered { font-size: 0.875rem; color: var(--color-ok); }
+.bulk-update-bar__clear {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 0.875rem; cursor: pointer; padding: 0.1rem 0.3rem;
+  line-height: 1;
+}
+.bulk-update-bar__clear:hover { color: var(--text-primary); background: none; }
+.bulk-update-bar__btn {
+  font-size: 0.8125rem;
+  padding: 0.35rem 1rem;
+  background: #1e3a5f;
+  border-color: #2563eb;
+  color: #93c5fd;
+  border-radius: 1rem;
+}
+.bulk-update-bar__btn:hover { background: #1e40af; }
+
 .check-row {
   display: flex;
   align-items: center;
@@ -151,6 +200,12 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   border-radius: 0.25rem;
   border-left: 3px solid transparent;
   margin-bottom: 0.25rem;
+}
+.check-row__checkbox {
+  width: 0.9rem; height: 0.9rem;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: #3b82f6;
 }
 
 .check-row--ok      { border-left-color: var(--color-ok); }

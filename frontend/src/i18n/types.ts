@@ -14,6 +14,10 @@ export interface Translations {
     noHosts: string;
     noHostsHint: string;
     noChecks: string;
+    selectAll: string;
+    deselectAll: string;
+    bulkUpdate: (n: number) => string;
+    bulkTriggered: (n: number) => string;
   };
   checkRow: {
     pending: string;

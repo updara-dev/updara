@@ -16,6 +16,10 @@ export const de: Translations = {
     noHosts: 'Noch keine Hosts verbunden.',
     noHostsHint: 'Installiere einen Agent und verbinde ihn mit diesem Server.',
     noChecks: 'Noch keine Checks gemeldet.',
+    selectAll: 'Alle Updates auswählen',
+    deselectAll: 'Auswahl aufheben',
+    bulkUpdate: (n) => `${n} ausgewählte updaten`,
+    bulkTriggered: (n) => `✅ ${n} Update${n > 1 ? 's' : ''} gestartet`,
   },
   checkRow: {
     pending: 'Ausstehend…',

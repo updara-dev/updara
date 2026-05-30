@@ -1,0 +1,93 @@
+name: n8n
+display_name: n8n
+category: automation
+docs: https://github.com/n8n-io/n8n/releases
+
+vars: []
+
+# Checks n8n version against latest GitHub release.
+# Auto-detects installation type: compose-managed → auto-update,
+# standalone docker run → shows "manual" badge (update via docker pull).
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, json, sys
+    try:
+        from urllib.request import urlopen, Request
+    except ImportError:
+        print("current=unknown")
+        sys.exit(0)
+
+    # Find running n8n container
+    ps = subprocess.run(['docker', 'ps', '--filter', 'name=n8n', '--format', '{{.Names}}'],
+                        capture_output=True, text=True)
+    container = ps.stdout.strip().split('\n')[0] if ps.stdout.strip() else ''
+    if not container:
+        print("error=n8n container not found (is it running?)")
+        sys.exit(0)
+
+    # Current version from container
+    ver = subprocess.run(
+        ['docker', 'exec', container, 'node', '-e',
+         "try{process.stdout.write(require('/usr/local/lib/node_modules/n8n/package.json').version)}catch(e){process.stdout.write('unknown')}"],
+        capture_output=True, text=True, timeout=10
+    )
+    current = ver.stdout.strip() or 'unknown'
+
+    # Detect if compose-managed
+    label = subprocess.run(
+        ['docker', 'inspect', '--format',
+         '{{index .Config.Labels "com.docker.compose.project.working_dir"}}', container],
+        capture_output=True, text=True
+    ).stdout.strip()
+    is_compose = bool(label)
+    if is_compose:
+        print(f"compose_dir={label}")
+    else:
+        print("standalone=true")
+
+    # Latest from GitHub
+    try:
+        req = Request('https://api.github.com/repos/n8n-io/n8n/releases/latest',
+                      headers={'User-Agent': 'updara-agent/1.0'})
+        data = json.loads(urlopen(req, timeout=10).read())
+        latest = data['tag_name'].lstrip('n')
+    except Exception as e:
+        print(f"current=v{current}")
+        print(f"error=GitHub API: {e}")
+        sys.exit(0)
+
+    print(f"current=v{current}")
+    print(f"latest=v{latest}")
+    if current != latest:
+        print("update_available=true")
+    PYEOF
+  parse:
+    current:     "$current"
+    latest:      "$latest"
+    compose_dir: "$compose_dir"
+    standalone:  "$standalone"
+  update_available: "update_available == 'true'"
+  interval: 3600
+
+update:
+  type: shell
+  # Compose-managed: pull + recreate. Standalone: manual — use docker pull + docker run.
+  command: |
+    COMPOSE_DIR=$(docker inspect --format \
+      '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' \
+      $(docker ps --filter name=n8n --format '{{.Names}}' | head -1) 2>/dev/null)
+    if [ -n "$COMPOSE_DIR" ]; then
+      echo "Updating n8n via docker compose in $COMPOSE_DIR"
+      cd "$COMPOSE_DIR" && docker compose pull && docker compose up -d
+    else
+      echo "n8n is running standalone (docker run). Pull the new image manually:"
+      echo "  docker pull docker.n8n.io/n8nio/n8n"
+      echo "  docker stop n8n && docker rm n8n"
+      echo "  # then re-run your original docker run command"
+      exit 1
+    fi
+
+notifications:
+  changelog: "https://github.com/n8n-io/n8n/releases"

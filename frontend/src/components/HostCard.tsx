@@ -4,6 +4,8 @@ import { useT } from '../i18n';
 
 interface Props {
   status: HostStatus;
+  selected: Set<string>;
+  onToggleSelect: (hostname: string, connector: string) => void;
   onClick?: () => void;
 }
 
@@ -14,7 +16,7 @@ function cardColor(status: HostStatus): string {
   return 'var(--color-ok)';
 }
 
-export function HostCard({ status, onClick }: Props) {
+export function HostCard({ status, selected, onToggleSelect, onClick }: Props) {
   const { t } = useT();
   const { host, results } = status;
   const color = cardColor(status);
@@ -31,7 +33,7 @@ export function HostCard({ status, onClick }: Props) {
       className={`host-card${onClick ? ' host-card--clickable' : ''}`}
       style={{ borderTop: `3px solid ${color}` }}
       onClick={(e) => {
-        if ((e.target as HTMLElement).closest('button, a')) return;
+        if ((e.target as HTMLElement).closest('button, a, input')) return;
         onClick?.();
       }}
     >
@@ -49,7 +51,15 @@ export function HostCard({ status, onClick }: Props) {
       {Object.entries(byCategory).map(([cat, items]) => (
         <div key={cat} className="host-card__category">
           <h3>{cat}</h3>
-          {items.map(r => <CheckRow key={r.connector} result={r} hostname={host.hostname} />)}
+          {items.map(r => (
+            <CheckRow
+              key={r.connector}
+              result={r}
+              hostname={host.hostname}
+              isSelected={selected.has(`${host.hostname}::${r.connector}`)}
+              onToggleSelect={() => onToggleSelect(host.hostname, r.connector)}
+            />
+          ))}
         </div>
       ))}
 
