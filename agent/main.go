@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -37,7 +38,8 @@ func main() {
 	}
 
 	hostname := env("HOSTNAME_OVERRIDE", mustHostname())
-	rep := reporter.New(serverURL, hostname, agentVersion, token)
+	ip := localIP()
+	rep := reporter.New(serverURL, hostname, ip, agentVersion, token)
 
 	connectors, err := connector.LoadAll(connDir)
 	if err != nil {
@@ -236,4 +238,13 @@ func mustHostname() string {
 		return "unknown"
 	}
 	return h
+}
+
+func localIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+	return conn.LocalAddr().(*net.UDPAddr).IP.String()
 }

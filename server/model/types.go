@@ -5,6 +5,7 @@ import "time"
 type Host struct {
 	ID           string    `json:"id"`
 	Hostname     string    `json:"hostname"`
+	IPAddress    string    `json:"ip_address,omitempty"`
 	AgentVersion string    `json:"agent_version"`
 	LastSeen     time.Time `json:"last_seen"`
 }
@@ -22,6 +23,7 @@ type CheckResult struct {
 
 type ReportRequest struct {
 	Hostname     string        `json:"hostname"`
+	IPAddress    string        `json:"ip_address,omitempty"`
 	AgentVersion string        `json:"agent_version"`
 	Token        string        `json:"token,omitempty"`
 	Results      []CheckResult `json:"results"`

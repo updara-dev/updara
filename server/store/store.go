@@ -23,6 +23,7 @@ const schema = `
 CREATE TABLE IF NOT EXISTS hosts (
     id            TEXT PRIMARY KEY,
     hostname      TEXT NOT NULL,
+    ip_address    TEXT NOT NULL DEFAULT '',
     agent_version TEXT NOT NULL,
     last_seen     TEXT NOT NULL
 );
@@ -74,6 +75,13 @@ func New(path string) *Store {
 	if _, err := db.Exec(schema); err != nil {
 		log.Fatalf("store: migrate: %v", err)
 	}
+	// Incremental migrations — safe to run repeatedly
+	migrations := []string{
+		`ALTER TABLE hosts ADD COLUMN ip_address TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, m := range migrations {
+		db.Exec(m) // ignore errors (column may already exist)
+	}
 	log.Printf("store: opened %s", path)
 	return &Store{db: db}
 }
@@ -86,9 +94,12 @@ func (s *Store) Upsert(req model.ReportRequest) {
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := s.db.Exec(`
-		INSERT INTO hosts (id, hostname, agent_version, last_seen) VALUES (?,?,?,?)
-		ON CONFLICT(id) DO UPDATE SET agent_version=excluded.agent_version, last_seen=excluded.last_seen
-	`, req.Hostname, req.Hostname, req.AgentVersion, now)
+		INSERT INTO hosts (id, hostname, ip_address, agent_version, last_seen) VALUES (?,?,?,?,?)
+		ON CONFLICT(id) DO UPDATE SET
+			ip_address=excluded.ip_address,
+			agent_version=excluded.agent_version,
+			last_seen=excluded.last_seen
+	`, req.Hostname, req.Hostname, req.IPAddress, req.AgentVersion, now)
 	if err != nil {
 		log.Printf("store: upsert host: %v", err)
 		return
@@ -114,7 +125,7 @@ func (s *Store) AllHosts() []model.HostStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rows, err := s.db.Query(`SELECT id, hostname, agent_version, last_seen FROM hosts ORDER BY hostname`)
+	rows, err := s.db.Query(`SELECT id, hostname, ip_address, agent_version, last_seen FROM hosts ORDER BY hostname`)
 	if err != nil {
 		log.Printf("store: query hosts: %v", err)
 		return nil
@@ -126,7 +137,7 @@ func (s *Store) AllHosts() []model.HostStatus {
 	for rows.Next() {
 		var h model.Host
 		var lastSeen string
-		if err := rows.Scan(&h.ID, &h.Hostname, &h.AgentVersion, &lastSeen); err != nil {
+		if err := rows.Scan(&h.ID, &h.Hostname, &h.IPAddress, &h.AgentVersion, &lastSeen); err != nil {
 			continue
 		}
 		h.LastSeen, _ = time.Parse(time.RFC3339Nano, lastSeen)

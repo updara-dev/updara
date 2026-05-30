@@ -13,15 +13,17 @@ import (
 type Reporter struct {
 	serverURL    string
 	hostname     string
+	ipAddress    string
 	agentVersion string
 	token        string
 	client       *http.Client
 }
 
-func New(serverURL, hostname, agentVersion, token string) *Reporter {
+func New(serverURL, hostname, ipAddress, agentVersion, token string) *Reporter {
 	return &Reporter{
 		serverURL:    serverURL,
 		hostname:     hostname,
+		ipAddress:    ipAddress,
 		agentVersion: agentVersion,
 		token:        token,
 		client:       &http.Client{Timeout: 10 * time.Second},
@@ -30,6 +32,7 @@ func New(serverURL, hostname, agentVersion, token string) *Reporter {
 
 type payload struct {
 	Hostname     string          `json:"hostname"`
+	IPAddress    string          `json:"ip_address,omitempty"`
 	AgentVersion string          `json:"agent_version"`
 	Token        string          `json:"token,omitempty"`
 	Results      []runner.Result `json:"results"`
@@ -38,6 +41,7 @@ type payload struct {
 func (r *Reporter) Send(results []runner.Result) error {
 	body, err := json.Marshal(payload{
 		Hostname:     r.hostname,
+		IPAddress:    r.ipAddress,
 		AgentVersion: r.agentVersion,
 		Token:        r.token,
 		Results:      results,

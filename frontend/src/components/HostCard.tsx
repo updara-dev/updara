@@ -31,6 +31,7 @@ export function HostCard({ status }: Props) {
           <h2>{host.hostname}</h2>
         </div>
         <span className="host-card__meta">
+          {host.ip_address && <span className="host-ip">{host.ip_address} · </span>}
           agent v{host.agent_version} · {lastSeen}
         </span>
       </div>
