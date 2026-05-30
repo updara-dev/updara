@@ -60,6 +60,15 @@ export interface Translations {
     confirmRemoveConnector: (name: string) => string;
     deleteHost: string;
     confirmDeleteHost: (name: string) => string;
+    editVars: string;
+    editVarsTitle: (name: string) => string;
+    saveVars: string;
+    savingVars: string;
+    varsUpdated: string;
+    varsError: (e: string) => string;
+    noVars: string;
+    rescan: string;
+    rescanQueued: string;
   };
   connectors: {
     title: string;

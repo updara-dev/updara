@@ -41,6 +41,7 @@ func (h *Handler) createProvision(w http.ResponseWriter, r *http.Request) {
 		HostType:   req.HostType,
 		Connectors: req.Connectors,
 		CreatedAt:  time.Now(),
+		ServerURL:  h.serverURL(r),
 	})
 
 	serverURL := h.serverURL(r)
@@ -140,34 +141,7 @@ func (h *Handler) serveInstallScript(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serverURL := h.serverURL(r)
-
-	// Build Environment= lines for systemd
-	var envLines strings.Builder
-	envLines.WriteString(fmt.Sprintf("Environment=SERVER_URL=%s\n", serverURL))
-	envLines.WriteString(fmt.Sprintf("Environment=UPDARA_TOKEN=%s\n", token))
-	envLines.WriteString(fmt.Sprintf("Environment=HOSTNAME_OVERRIDE=%s\n", p.Name))
-	envLines.WriteString("Environment=CONNECTORS_DIR=/etc/updara/connectors\n")
-	for _, c := range p.Connectors {
-		for k, v := range c.Vars {
-			envLines.WriteString(fmt.Sprintf("Environment=%s=%s\n", k, v))
-		}
-	}
-
-	svc := fmt.Sprintf(`[Unit]
-Description=Updara Agent
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-%s
-ExecStart=/usr/local/bin/updara-agent
-Restart=always
-RestartSec=30
-
-[Install]
-WantedBy=multi-user.target
-`, envLines.String())
-
+	svc := h.buildServiceFile(serverURL, token, p.Name, p.Connectors)
 	svcB64 := base64.StdEncoding.EncodeToString([]byte(svc))
 
 	script := fmt.Sprintf(`#!/bin/sh
@@ -361,7 +335,110 @@ func isValidConnectorName(name string) bool {
 		!strings.HasPrefix(name, "_")
 }
 
+// ── Provision update ──────────────────────────────────────────────────────────
+
+// PUT /api/v1/provisions/{token}
+func (h *Handler) updateProvision(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("token")
+	var req struct {
+		Connectors []model.ConnectorSpec `json:"connectors"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	p, ok := h.store.GetProvision(token)
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	p.Connectors = req.Connectors
+	p.ServerURL = h.serverURL(r)
+	h.store.AddProvision(*p) // INSERT OR REPLACE
+
+	if p.ClaimedBy == "" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	// Queue service-file rewrite + restart so the agent picks up new vars
+	svc := h.buildServiceFile(p.ServerURL, token, p.Name, req.Connectors)
+	svcB64 := base64.StdEncoding.EncodeToString([]byte(svc))
+	cmd := fmt.Sprintf(
+		"printf '%%s' '%s' | base64 -d > /etc/systemd/system/updara-agent.service && systemctl daemon-reload && systemctl restart updara-agent",
+		svcB64,
+	)
+	b := make([]byte, 8)
+	rand.Read(b)
+	h.store.AddCommand(model.Command{
+		ID:        hex.EncodeToString(b),
+		HostID:    p.ClaimedBy,
+		Connector: "_vars-update",
+		Cmd:       cmd,
+		Status:    model.CmdStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// GET /api/v1/hosts/{hostname}/provision
+func (h *Handler) hostProvision(w http.ResponseWriter, r *http.Request) {
+	hostname := r.PathValue("hostname")
+	p, ok := h.store.ProvisionByHost(hostname)
+	if !ok {
+		http.Error(w, "no provision", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(p)
+}
+
+// POST /api/v1/hosts/{hostname}/recheck/{connector}
+func (h *Handler) recheckConnector(w http.ResponseWriter, r *http.Request) {
+	hostname := r.PathValue("hostname")
+	connector := r.PathValue("connector")
+	b := make([]byte, 8)
+	rand.Read(b)
+	h.store.AddCommand(model.Command{
+		ID:        hex.EncodeToString(b),
+		HostID:    hostname,
+		Connector: connector,
+		Cmd:       "true",
+		Status:    model.CmdStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	})
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+func (h *Handler) buildServiceFile(serverURL, token, hostname string, connectors []model.ConnectorSpec) string {
+	var envLines strings.Builder
+	envLines.WriteString(fmt.Sprintf("Environment=SERVER_URL=%s\n", serverURL))
+	envLines.WriteString(fmt.Sprintf("Environment=UPDARA_TOKEN=%s\n", token))
+	envLines.WriteString(fmt.Sprintf("Environment=HOSTNAME_OVERRIDE=%s\n", hostname))
+	envLines.WriteString("Environment=CONNECTORS_DIR=/etc/updara/connectors\n")
+	for _, c := range connectors {
+		for k, v := range c.Vars {
+			envLines.WriteString(fmt.Sprintf("Environment=%s=%s\n", k, v))
+		}
+	}
+	return fmt.Sprintf(`[Unit]
+Description=Updara Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+%s
+ExecStart=/usr/local/bin/updara-agent
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+`, envLines.String())
+}
 
 func generateToken() string {
 	b := make([]byte, 16)

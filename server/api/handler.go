@@ -44,6 +44,8 @@ func (h *Handler) Router() http.Handler {
 
 	// Host management
 	mux.HandleFunc("DELETE /api/v1/hosts/{hostname}", h.deleteHost)
+	mux.HandleFunc("GET /api/v1/hosts/{hostname}/provision", h.hostProvision)
+	mux.HandleFunc("POST /api/v1/hosts/{hostname}/recheck/{connector}", h.recheckConnector)
 
 	// Per-host connector removal
 	mux.HandleFunc("DELETE /api/v1/hosts/{hostname}/connectors/{connector}", h.deleteHostConnector)
@@ -55,6 +57,7 @@ func (h *Handler) Router() http.Handler {
 	// Host provisioning
 	mux.HandleFunc("POST /api/v1/provisions", h.createProvision)
 	mux.HandleFunc("GET /api/v1/provisions", h.listProvisions)
+	mux.HandleFunc("PUT /api/v1/provisions/{token}", h.updateProvision)
 	mux.HandleFunc("DELETE /api/v1/provisions/{token}", h.deleteProvision)
 	mux.HandleFunc("GET /api/v1/provisions/{token}/config", h.getProvisionConfig)
 

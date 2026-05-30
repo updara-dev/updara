@@ -21,6 +21,7 @@ type Provision struct {
 	Connectors []ConnectorSpec `json:"connectors"`
 	CreatedAt  time.Time       `json:"created_at"`
 	ClaimedBy  string          `json:"claimed_by,omitempty"`
+	ServerURL  string          `json:"server_url,omitempty"`
 }
 
 // ConnectorMeta is returned by GET /api/v1/connectors.

@@ -100,6 +100,7 @@ func New(path string) *Store {
 	// Incremental migrations — safe to run repeatedly
 	migrations := []string{
 		`ALTER TABLE hosts ADD COLUMN ip_address TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE provisions ADD COLUMN server_url TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, m := range migrations {
 		db.Exec(m) // ignore errors (column may already exist)
@@ -352,9 +353,9 @@ func (s *Store) AddProvision(p model.Provision) {
 	defer s.mu.Unlock()
 	connsJSON, _ := json.Marshal(p.Connectors)
 	_, err := s.db.Exec(`
-		INSERT OR REPLACE INTO provisions (token,name,host_type,connectors_json,created_at,claimed_by)
-		VALUES (?,?,?,?,?,?)
-	`, p.Token, p.Name, p.HostType, string(connsJSON), p.CreatedAt.UTC().Format(time.RFC3339Nano), p.ClaimedBy)
+		INSERT OR REPLACE INTO provisions (token,name,host_type,connectors_json,created_at,claimed_by,server_url)
+		VALUES (?,?,?,?,?,?,?)
+	`, p.Token, p.Name, p.HostType, string(connsJSON), p.CreatedAt.UTC().Format(time.RFC3339Nano), p.ClaimedBy, p.ServerURL)
 	if err != nil {
 		log.Printf("store: add provision: %v", err)
 	}
@@ -369,8 +370,23 @@ func (s *Store) GetProvision(token string) (*model.Provision, bool) {
 func (s *Store) getProvision(token string) (*model.Provision, bool) {
 	var p model.Provision
 	var connsJSON, createdAt string
-	err := s.db.QueryRow(`SELECT token,name,host_type,connectors_json,created_at,claimed_by FROM provisions WHERE token=?`, token).
-		Scan(&p.Token, &p.Name, &p.HostType, &connsJSON, &createdAt, &p.ClaimedBy)
+	err := s.db.QueryRow(`SELECT token,name,host_type,connectors_json,created_at,claimed_by,server_url FROM provisions WHERE token=?`, token).
+		Scan(&p.Token, &p.Name, &p.HostType, &connsJSON, &createdAt, &p.ClaimedBy, &p.ServerURL)
+	if err != nil {
+		return nil, false
+	}
+	json.Unmarshal([]byte(connsJSON), &p.Connectors)
+	p.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+	return &p, true
+}
+
+func (s *Store) ProvisionByHost(hostname string) (*model.Provision, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var p model.Provision
+	var connsJSON, createdAt string
+	err := s.db.QueryRow(`SELECT token,name,host_type,connectors_json,created_at,claimed_by,server_url FROM provisions WHERE claimed_by=? ORDER BY created_at DESC LIMIT 1`, hostname).
+		Scan(&p.Token, &p.Name, &p.HostType, &connsJSON, &createdAt, &p.ClaimedBy, &p.ServerURL)
 	if err != nil {
 		return nil, false
 	}
@@ -390,7 +406,7 @@ func (s *Store) ClaimProvision(token, hostname string) {
 func (s *Store) AllProvisions() []model.Provision {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT token,name,host_type,connectors_json,created_at,claimed_by FROM provisions ORDER BY created_at DESC`)
+	rows, err := s.db.Query(`SELECT token,name,host_type,connectors_json,created_at,claimed_by,server_url FROM provisions ORDER BY created_at DESC`)
 	if err != nil {
 		return nil
 	}
@@ -399,7 +415,7 @@ func (s *Store) AllProvisions() []model.Provision {
 	for rows.Next() {
 		var p model.Provision
 		var connsJSON, createdAt string
-		if err := rows.Scan(&p.Token, &p.Name, &p.HostType, &connsJSON, &createdAt, &p.ClaimedBy); err != nil {
+		if err := rows.Scan(&p.Token, &p.Name, &p.HostType, &connsJSON, &createdAt, &p.ClaimedBy, &p.ServerURL); err != nil {
 			continue
 		}
 		json.Unmarshal([]byte(connsJSON), &p.Connectors)

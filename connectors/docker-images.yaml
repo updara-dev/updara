@@ -3,7 +3,15 @@ display_name: Docker Images
 category: infrastructure
 docs: https://docs.docker.com
 
-vars: []
+vars:
+  - name: DOCKER_EXCLUDE_STACKS
+    description: "Comma-separated compose project names to hide (e.g. traefik,portainer)"
+    required: false
+    default: ""
+  - name: DOCKER_EXTRA_COMPOSE_DIRS
+    description: "Additional directories to scan for docker-compose.yml (comma-separated)"
+    required: false
+    default: ""
 
 # Checks all running containers against Docker Hub for image updates.
 # Compares local image digest with remote manifest digest.
@@ -20,14 +28,21 @@ check:
         print("count=0")
         sys.exit(0)
 
+    exclude_stacks = set(s.strip() for s in os.environ.get('DOCKER_EXCLUDE_STACKS', '').split(',') if s.strip())
+    extra_dirs = [d.strip() for d in os.environ.get('DOCKER_EXTRA_COMPOSE_DIRS', '').split(',') if d.strip()]
+
     # Auto-discover docker-compose.yml files (including Portainer-managed stacks)
+    base_dirs = ['/opt', '/root', '/home', '/srv', '/docker',
+                 '/var/lib/docker/volumes/portainer_portainer_data/_data/compose']
     find_result = subprocess.run(
-        ['find', '/opt', '/root', '/home', '/srv', '/docker',
-         '/var/lib/docker/volumes/portainer_portainer_data/_data/compose',
-         '-maxdepth', '5', '-name', 'docker-compose.yml', '-o', '-name', 'docker-compose.yaml'],
+        ['find'] + base_dirs + extra_dirs +
+        ['-maxdepth', '5', '-name', 'docker-compose.yml', '-o', '-name', 'docker-compose.yaml'],
         capture_output=True, text=True
     )
     compose_dirs = list({os.path.dirname(p) for p in find_result.stdout.strip().split('\n') if p})
+    for d in extra_dirs:
+        if d not in compose_dirs:
+            compose_dirs.append(d)
 
     # Check running containers for updates
     result = subprocess.run(
@@ -43,6 +58,16 @@ check:
         if '\t' not in line:
             continue
         cname, image = line.split('\t', 1)
+
+        # Skip containers from excluded stacks
+        if exclude_stacks:
+            project = subprocess.run(
+                ['docker', 'inspect', '--format',
+                 '{{index .Config.Labels "com.docker.compose.project"}}', cname],
+                capture_output=True, text=True
+            ).stdout.strip()
+            if project in exclude_stacks:
+                continue
 
         # Skip non-Docker-Hub images (ghcr.io, quay.io, custom registries)
         if '.' in image.split('/')[0]:
@@ -110,6 +135,11 @@ update:
         -maxdepth 5 \( -name "docker-compose.yml" -o -name "docker-compose.yaml" \) 2>/dev/null; \
       find /var/lib/docker/volumes \
         -maxdepth 8 \( -name "docker-compose.yml" -o -name "docker-compose.yaml" \) 2>/dev/null; \
+      if [ -n "${DOCKER_EXTRA_COMPOSE_DIRS:-}" ]; then \
+        echo "$DOCKER_EXTRA_COMPOSE_DIRS" | tr ',' '\n' | while read d; do \
+          [ -n "$d" ] && find "$d" -maxdepth 3 \( -name "docker-compose.yml" -o -name "docker-compose.yaml" \) 2>/dev/null; \
+        done; \
+      fi; \
     } | xargs -I{} dirname {} | sort -u \
       | while read dir; do
           echo "[Updara] Updating stack in $dir"

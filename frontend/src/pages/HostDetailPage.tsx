@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import { fetchHostDetail, ignoreConnector, unignoreConnector, triggerUpdate, fetchCommands, removeHostConnector, deleteHost } from '../api/client';
+import { fetchHostDetail, ignoreConnector, unignoreConnector, triggerUpdate, fetchCommands, removeHostConnector, deleteHost, fetchHostProvision, updateProvision, recheckConnector, fetchConnectors } from '../api/client';
+import type { ConnectorMeta } from '../api/client';
 import { useT } from '../i18n';
-import type { HostDetail, CheckResult, Command } from '../types';
+import type { HostDetail, CheckResult, Command, Provision } from '../types';
 
 interface Props {
   hostname: string;
@@ -25,6 +26,100 @@ function agentStatus(lastSeen: string): 'online' | 'stale' | 'offline' {
 
 function stripAnsi(str: string): string {
   return str.replace(/\x1b\[[0-9;?]*[a-zA-Z]|\r/g, '').trim();
+}
+
+function VarsEditDialog({
+  hostname,
+  provision,
+  connectorMeta,
+  onClose,
+}: {
+  hostname: string;
+  provision: Provision;
+  connectorMeta: ConnectorMeta[];
+  onClose: () => void;
+}) {
+  const { t } = useT();
+  const [vars, setVars] = useState<Record<string, Record<string, string>>>(() => {
+    const m: Record<string, Record<string, string>> = {};
+    for (const c of provision.connectors) {
+      m[c.name] = { ...c.vars };
+    }
+    return m;
+  });
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [errMsg, setErrMsg] = useState('');
+
+  // Connectors that have var definitions AND are in the provision
+  const editableConnectors = connectorMeta.filter(
+    meta => meta.vars.length > 0 && provision.connectors.some(c => c.name === meta.name)
+  );
+
+  const handleSave = async () => {
+    setStatus('saving');
+    try {
+      const connectors = provision.connectors.map(c => ({
+        name: c.name,
+        vars: vars[c.name] ?? {},
+      }));
+      await updateProvision(provision.token, connectors);
+      setStatus('saved');
+      setTimeout(onClose, 1800);
+    } catch (e) {
+      setErrMsg(String(e));
+      setStatus('error');
+    }
+  };
+
+  return (
+    <div className="vars-dialog-overlay" onClick={onClose}>
+      <div className="vars-dialog" onClick={e => e.stopPropagation()}>
+        <div className="vars-dialog__header">
+          <h3>{t.hostDetail.editVarsTitle(hostname)}</h3>
+          <button className="vars-dialog__close" onClick={onClose}>✕</button>
+        </div>
+        <div className="vars-dialog__body">
+          {editableConnectors.length === 0 ? (
+            <p className="vars-dialog__empty">{t.hostDetail.noVars}</p>
+          ) : (
+            editableConnectors.map(meta => (
+              <div key={meta.name} className="vars-dialog__section">
+                <h4 className="vars-dialog__section-title">{meta.display_name}</h4>
+                {meta.vars.map(v => (
+                  <div key={v.name} className="vars-dialog__field">
+                    <label className="vars-dialog__label">
+                      <span className="vars-dialog__var-name">{v.name}</span>
+                      {v.description && <span className="vars-dialog__var-desc">{v.description}</span>}
+                    </label>
+                    <input
+                      className="vars-dialog__input"
+                      type="text"
+                      value={vars[meta.name]?.[v.name] ?? ''}
+                      placeholder={v.default || ''}
+                      onChange={e => setVars(prev => ({
+                        ...prev,
+                        [meta.name]: { ...(prev[meta.name] ?? {}), [v.name]: e.target.value },
+                      }))}
+                    />
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+        <div className="vars-dialog__footer">
+          {status === 'saved' && <span className="vars-dialog__status ok">{t.hostDetail.varsUpdated}</span>}
+          {status === 'error' && <span className="vars-dialog__status err">{t.hostDetail.varsError(errMsg)}</span>}
+          <button className="vars-dialog__cancel" onClick={onClose}>{status === 'saved' ? 'Close' : 'Cancel'}</button>
+          {status !== 'saved' && (
+            <button className="vars-dialog__save" onClick={handleSave} disabled={status === 'saving'}>
+              {status === 'saving' ? t.hostDetail.savingVars : t.hostDetail.saveVars}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ContainerRow({
@@ -73,6 +168,7 @@ function ResultRow({
   const { t } = useT();
   const [busy, setBusy] = useState(false);
   const [cmd, setCmd] = useState<Command | null>(null);
+  const [rescanning, setRescanning] = useState(false);
 
   useEffect(() => {
     if (!cmd || cmd.status === 'done' || cmd.status === 'failed') return;
@@ -119,6 +215,12 @@ function ResultRow({
     setBusy(false);
   };
 
+  const handleRescan = async () => {
+    setRescanning(true);
+    await recheckConnector(hostname, result.connector).catch(() => {});
+    setTimeout(() => setRescanning(false), 3000);
+  };
+
   return (
     <div className="detail-row">
       <div className={`detail-row__main detail-row__main--${state}`}>
@@ -147,6 +249,11 @@ function ResultRow({
             {hasComposeUpdates && !cmd && (
               <button className="update-btn" onClick={handleUpdate}>{t.checkRow.update}</button>
             )}
+            <button
+              className="rescan-btn"
+              onClick={handleRescan}
+              disabled={rescanning}
+            >{rescanning ? t.hostDetail.rescanQueued : t.hostDetail.rescan}</button>
             <button
               className="remove-connector-btn"
               title={t.hostDetail.removeConnector}
@@ -247,6 +354,9 @@ export function HostDetailPage({ hostname, onBack }: Props) {
   const { t } = useT();
   const [detail, setDetail] = useState<HostDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [provision, setProvision] = useState<Provision | null>(null);
+  const [connectorMeta, setConnectorMeta] = useState<ConnectorMeta[]>([]);
+  const [showVarsDialog, setShowVarsDialog] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -261,6 +371,8 @@ export function HostDetailPage({ hostname, onBack }: Props) {
   useEffect(() => {
     load();
     const id = setInterval(load, 30_000);
+    fetchHostProvision(hostname).then(setProvision).catch(() => {});
+    fetchConnectors().then(setConnectorMeta).catch(() => {});
     return () => clearInterval(id);
   }, [load]);
 
@@ -311,13 +423,31 @@ export function HostDetailPage({ hostname, onBack }: Props) {
 
   return (
     <div className="host-detail">
+      {showVarsDialog && provision && (
+        <VarsEditDialog
+          hostname={hostname}
+          provision={provision}
+          connectorMeta={connectorMeta}
+          onClose={() => {
+            setShowVarsDialog(false);
+            fetchHostProvision(hostname).then(setProvision).catch(() => {});
+          }}
+        />
+      )}
       <div className="host-detail__topbar">
         <button className="host-detail__back" onClick={onBack}>
           {t.hostDetail.back}
         </button>
-        <button className="delete-host-btn" onClick={handleDeleteHost}>
-          {t.hostDetail.deleteHost}
-        </button>
+        <div className="host-detail__topbar-actions">
+          {provision && (
+            <button className="edit-vars-btn" onClick={() => setShowVarsDialog(true)}>
+              {t.hostDetail.editVars}
+            </button>
+          )}
+          <button className="delete-host-btn" onClick={handleDeleteHost}>
+            {t.hostDetail.deleteHost}
+          </button>
+        </div>
       </div>
 
       <div className="host-detail__header">

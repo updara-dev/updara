@@ -766,6 +766,17 @@ label > small { font-size: 0.75rem; color: var(--text-muted); }
 }
 .host-detail__back:hover { color: var(--text-primary); background: none; }
 
+.host-detail__topbar-actions { display: flex; align-items: center; gap: 0.5rem; }
+
+.edit-vars-btn {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  color: var(--text-secondary);
+  border-color: var(--border);
+  background: transparent;
+}
+.edit-vars-btn:hover { color: var(--text-primary); border-color: var(--text-secondary); background: var(--surface); }
+
 .delete-host-btn {
   font-size: 0.75rem;
   padding: 0.25rem 0.75rem;
@@ -775,6 +786,81 @@ label > small { font-size: 0.75rem; color: var(--text-muted); }
   opacity: 0.45;
 }
 .delete-host-btn:hover { color: var(--color-critical); border-color: var(--color-critical); opacity: 1; background: #2a0a0a; }
+
+.rescan-btn {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  color: var(--text-secondary);
+  border-color: var(--border);
+  background: transparent;
+}
+.rescan-btn:hover { color: var(--text-primary); border-color: var(--text-secondary); }
+.rescan-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* ── Vars Edit Dialog ─────────────────────────────────────── */
+.vars-dialog-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+}
+.vars-dialog {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: min(520px, 95vw);
+  max-height: 80vh;
+  display: flex; flex-direction: column;
+}
+.vars-dialog__header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.vars-dialog__header h3 { margin: 0; font-size: 1rem; }
+.vars-dialog__close {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 1rem; cursor: pointer; padding: 0.25rem;
+}
+.vars-dialog__close:hover { color: var(--text-primary); }
+.vars-dialog__body { padding: 1rem 1.25rem; overflow-y: auto; flex: 1; }
+.vars-dialog__empty { color: var(--text-muted); font-size: 0.875rem; }
+.vars-dialog__section { margin-bottom: 1.25rem; }
+.vars-dialog__section-title {
+  font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--text-muted); margin: 0 0 0.75rem;
+}
+.vars-dialog__field { margin-bottom: 0.75rem; }
+.vars-dialog__label { display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 0.35rem; }
+.vars-dialog__var-name { font-family: 'Fira Code', monospace; font-size: 0.8125rem; color: var(--text-primary); }
+.vars-dialog__var-desc { font-size: 0.75rem; color: var(--text-muted); }
+.vars-dialog__input {
+  width: 100%; box-sizing: border-box;
+  background: var(--bg); border: 1px solid var(--border);
+  color: var(--text-primary); border-radius: 4px;
+  padding: 0.4rem 0.6rem; font-size: 0.875rem; font-family: 'Fira Code', monospace;
+}
+.vars-dialog__input:focus { outline: none; border-color: var(--color-ok); }
+.vars-dialog__footer {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--border);
+  justify-content: flex-end;
+}
+.vars-dialog__status { font-size: 0.8125rem; margin-right: auto; }
+.vars-dialog__status.ok { color: var(--color-ok); }
+.vars-dialog__status.err { color: var(--color-critical); }
+.vars-dialog__cancel {
+  font-size: 0.8125rem; padding: 0.35rem 0.9rem;
+  background: transparent; border-color: var(--border); color: var(--text-secondary);
+}
+.vars-dialog__cancel:hover { border-color: var(--text-muted); color: var(--text-primary); }
+.vars-dialog__save {
+  font-size: 0.8125rem; padding: 0.35rem 0.9rem;
+  background: #1e3a5f; border-color: #2563eb; color: #93c5fd;
+}
+.vars-dialog__save:hover:not(:disabled) { background: #1e40af; }
+.vars-dialog__save:disabled { opacity: 0.5; cursor: default; }
 
 .host-detail__header { margin-bottom: 2rem; }
 

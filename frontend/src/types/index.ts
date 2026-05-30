@@ -39,3 +39,18 @@ export interface Command {
   created_at: string;
   updated_at: string;
 }
+
+export interface ConnectorSpec {
+  name: string;
+  vars: Record<string, string>;
+}
+
+export interface Provision {
+  token: string;
+  name: string;
+  host_type: string;
+  connectors: ConnectorSpec[];
+  created_at: string;
+  claimed_by?: string;
+  server_url?: string;
+}

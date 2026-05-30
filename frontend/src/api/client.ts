@@ -92,3 +92,18 @@ export const removeHostConnector = (hostname: string, connector: string) =>
 
 export const deleteHost = (hostname: string) =>
   request<void>(`/api/v1/hosts/${encodeURIComponent(hostname)}`, { method: 'DELETE' });
+
+export const fetchHostProvision = (hostname: string) =>
+  request<import('../types').Provision>(`/api/v1/hosts/${encodeURIComponent(hostname)}/provision`);
+
+export const updateProvision = (token: string, connectors: { name: string; vars: Record<string, string> }[]) =>
+  request<void>(`/api/v1/provisions/${encodeURIComponent(token)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ connectors }),
+  });
+
+export const recheckConnector = (hostname: string, connector: string) =>
+  request<void>(`/api/v1/hosts/${encodeURIComponent(hostname)}/recheck/${encodeURIComponent(connector)}`, {
+    method: 'POST',
+  });
