@@ -76,27 +76,41 @@ check:
         except Exception:
             pass
 
+    # Detect standalone containers (no com.docker.compose.project label)
+    standalone = []
+    for cname in outdated:
+        label = subprocess.run(
+            ['docker', 'inspect', '--format', '{{index .Config.Labels "com.docker.compose.project"}}', cname],
+            capture_output=True, text=True
+        ).stdout.strip()
+        if not label:
+            standalone.append(cname)
+
     print(f'count={len(outdated)}')
     if outdated:
         print(f'outdated={",".join(outdated)}')
+    if standalone:
+        print(f'standalone={",".join(standalone)}')
     if compose_dirs:
         print(f'compose_dirs={",".join(sorted(compose_dirs))}')
     PYEOF
   parse:
     count:        "$count"
     outdated:     "$outdated"
+    standalone:   "$standalone"
     compose_dirs: "$compose_dirs"
   update_available: "count > 0"
   interval: 3600
 
 update:
   type: shell
-  # Auto-discovers all docker-compose.yml locations and updates each stack.
+  # Auto-discovers all docker-compose.yml locations (incl. Portainer-managed volumes) and updates each stack.
   command: |
-    find /opt /root /home /srv /docker \
-      /var/lib/docker/volumes/portainer_portainer_data/_data/compose \
-      -maxdepth 5 \( -name "docker-compose.yml" -o -name "docker-compose.yaml" \) 2>/dev/null \
-      | xargs -I{} dirname {} | sort -u \
+    { find /opt /root /home /srv /docker \
+        -maxdepth 5 \( -name "docker-compose.yml" -o -name "docker-compose.yaml" \) 2>/dev/null; \
+      find /var/lib/docker/volumes \
+        -maxdepth 8 \( -name "docker-compose.yml" -o -name "docker-compose.yaml" \) 2>/dev/null; \
+    } | xargs -I{} dirname {} | sort -u \
       | while read dir; do
           echo "[Updara] Updating stack in $dir"
           cd "$dir" && docker compose pull && docker compose up -d

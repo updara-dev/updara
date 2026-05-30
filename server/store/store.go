@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -61,9 +63,18 @@ CREATE TABLE IF NOT EXISTS commands (
     updated_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_results_host   ON results(host_id);
-CREATE INDEX IF NOT EXISTS idx_commands_host  ON commands(host_id);
+CREATE TABLE IF NOT EXISTS ignored_items (
+    host_id    TEXT NOT NULL,
+    connector  TEXT NOT NULL,
+    item       TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (host_id, connector, item)
+);
+
+CREATE INDEX IF NOT EXISTS idx_results_host    ON results(host_id);
+CREATE INDEX IF NOT EXISTS idx_commands_host   ON commands(host_id);
 CREATE INDEX IF NOT EXISTS idx_commands_status ON commands(status);
+CREATE INDEX IF NOT EXISTS idx_ignored_host    ON ignored_items(host_id);
 `
 
 func New(path string) *Store {
@@ -82,6 +93,17 @@ func New(path string) *Store {
 	for _, m := range migrations {
 		db.Exec(m) // ignore errors (column may already exist)
 	}
+
+	// Migrate ignored_items to schema with 'item' column (one-time, safe to re-check)
+	var itemColCount int
+	db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('ignored_items') WHERE name='item'`).Scan(&itemColCount)
+	if itemColCount == 0 {
+		db.Exec(`DROP TABLE IF EXISTS ignored_items`)
+		db.Exec(`CREATE TABLE IF NOT EXISTS ignored_items (host_id TEXT NOT NULL, connector TEXT NOT NULL, item TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, PRIMARY KEY (host_id, connector, item))`)
+		db.Exec(`CREATE INDEX IF NOT EXISTS idx_ignored_host ON ignored_items(host_id)`)
+		log.Printf("store: migrated ignored_items to item-level schema")
+	}
+
 	log.Printf("store: opened %s", path)
 	return &Store{db: db}
 }
@@ -147,12 +169,58 @@ func (s *Store) AllHosts() []model.HostStatus {
 
 	var out []model.HostStatus
 	for _, h := range hosts {
-		out = append(out, model.HostStatus{Host: h, Results: s.queryResults(h.ID)})
+		ignored := s.fetchIgnored(h.ID)
+		out = append(out, model.HostStatus{Host: h, Results: s.queryResults(h.ID, ignored)})
 	}
 	return out
 }
 
-func (s *Store) queryResults(hostID string) []model.CheckResult {
+func (s *Store) GetHostStatus(hostname string) (*model.HostStatus, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var h model.Host
+	var lastSeen string
+	err := s.db.QueryRow(`SELECT id, hostname, ip_address, agent_version, last_seen FROM hosts WHERE id=?`, hostname).
+		Scan(&h.ID, &h.Hostname, &h.IPAddress, &h.AgentVersion, &lastSeen)
+	if err != nil {
+		return nil, false
+	}
+	h.LastSeen, _ = time.Parse(time.RFC3339Nano, lastSeen)
+
+	ignored := s.fetchIgnored(h.ID)
+	return &model.HostStatus{Host: h, Results: s.queryResults(h.ID, ignored)}, true
+}
+
+// fetchIgnored must be called while s.mu is held.
+// Returns map[connector][]items where item="" means connector-level ignore.
+func (s *Store) fetchIgnored(hostID string) map[string][]string {
+	rows, err := s.db.Query(`SELECT connector, item FROM ignored_items WHERE host_id=?`, hostID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := map[string][]string{}
+	for rows.Next() {
+		var connector, item string
+		rows.Scan(&connector, &item)
+		out[connector] = append(out[connector], item)
+	}
+	return out
+}
+
+func (s *Store) SetIgnored(hostID, connector, item string, ignored bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ignored {
+		s.db.Exec(`INSERT OR REPLACE INTO ignored_items (host_id, connector, item, created_at) VALUES (?,?,?,?)`,
+			hostID, connector, item, time.Now().UTC().Format(time.RFC3339Nano))
+	} else {
+		s.db.Exec(`DELETE FROM ignored_items WHERE host_id=? AND connector=? AND item=?`, hostID, connector, item)
+	}
+}
+
+func (s *Store) queryResults(hostID string, ignored map[string][]string) []model.CheckResult {
 	rows, err := s.db.Query(`
 		SELECT connector,display_name,category,values_json,update_available,changelog,error,checked_at
 		FROM results WHERE host_id=? ORDER BY connector
@@ -174,9 +242,63 @@ func (s *Store) queryResults(hostID string) []model.CheckResult {
 		json.Unmarshal([]byte(valJSON), &r.Values)
 		r.UpdateAvailable = upd == 1
 		r.CheckedAt, _ = time.Parse(time.RFC3339Nano, checkedAt)
+
+		if items, ok := ignored[r.Connector]; ok {
+			connectorLevel := false
+			var itemLevel []string
+			for _, it := range items {
+				if it == "" {
+					connectorLevel = true
+				} else {
+					itemLevel = append(itemLevel, it)
+				}
+			}
+			if connectorLevel {
+				r.Ignored = true
+				r.UpdateAvailable = false
+			} else if len(itemLevel) > 0 {
+				r.IgnoredItems = itemLevel
+				r.Values = applyItemIgnores(r.Values, itemLevel, &r.UpdateAvailable)
+			}
+		}
+
 		out = append(out, r)
 	}
 	return out
+}
+
+// applyItemIgnores removes ignored containers from the outdated/count values.
+func applyItemIgnores(vals map[string]string, ignoredItems []string, updateAvailable *bool) map[string]string {
+	outdated, ok := vals["outdated"]
+	if !ok || outdated == "" {
+		return vals
+	}
+	ignoredSet := map[string]bool{}
+	for _, it := range ignoredItems {
+		ignoredSet[strings.TrimSpace(it)] = true
+	}
+	containers := strings.Split(outdated, ",")
+	var remaining []string
+	for _, c := range containers {
+		c = strings.TrimSpace(c)
+		if c != "" && !ignoredSet[c] {
+			remaining = append(remaining, c)
+		}
+	}
+	// Copy map to avoid modifying shared state
+	newVals := make(map[string]string, len(vals))
+	for k, v := range vals {
+		newVals[k] = v
+	}
+	if len(remaining) == 0 {
+		*updateAvailable = false
+		newVals["outdated"] = ""
+		newVals["count"] = "0"
+	} else {
+		newVals["outdated"] = strings.Join(remaining, ",")
+		newVals["count"] = strconv.Itoa(len(remaining))
+	}
+	return newVals
 }
 
 // ── Provisions ───────────────────────────────────────────────────────────────

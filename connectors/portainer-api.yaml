@@ -20,7 +20,7 @@ check:
   type: shell
   command: |
     python3 - <<'PYEOF'
-    import subprocess, json, sys, os
+    import subprocess, json, sys, os, ssl
     try:
         from urllib.request import urlopen, Request
         from urllib.error import URLError, HTTPError
@@ -31,6 +31,11 @@ check:
     base_url = os.environ.get('PORTAINER_URL', 'http://localhost:9000').rstrip('/')
     token    = os.environ.get('PORTAINER_TOKEN', '')
 
+    # Allow self-signed certs (Portainer default)
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
     if not token:
         print("count=0")
         print("error=PORTAINER_TOKEN not set")
@@ -40,7 +45,7 @@ check:
         req = Request(f'{base_url}{path}',
                       headers={'X-API-Key': token, 'Content-Type': 'application/json'})
         try:
-            return json.loads(urlopen(req, timeout=15).read())
+            return json.loads(urlopen(req, timeout=15, context=ctx).read())
         except HTTPError as e:
             return None
         except Exception:
@@ -114,7 +119,7 @@ update:
   # Redeploys all outdated stacks via Portainer API (keeps Portainer in sync).
   command: |
     python3 - <<'PYEOF'
-    import json, os, sys
+    import json, os, sys, ssl
     try:
         from urllib.request import urlopen, Request
         from urllib.error import HTTPError
@@ -126,13 +131,17 @@ update:
     token    = os.environ.get('PORTAINER_TOKEN', '')
     outdated = os.environ.get('outdated', '').split(',')
 
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
     def api(path, method='GET', data=None):
         body = json.dumps(data).encode() if data else None
         req = Request(f'{base_url}{path}', data=body,
                       headers={'X-API-Key': token, 'Content-Type': 'application/json'},
                       method=method)
         try:
-            resp = urlopen(req, timeout=60)
+            resp = urlopen(req, timeout=60, context=ctx)
             return json.loads(resp.read()) if resp.status != 204 else {}
         except Exception as e:
             print(f'API error {path}: {e}')

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { fetchHosts } from './api/client';
 import { Dashboard } from './pages/Dashboard';
 import { ConnectorsPage } from './pages/ConnectorsPage';
+import { HostDetailPage } from './pages/HostDetailPage';
 import { AddHostWizard } from './components/AddHostWizard';
 import { useT } from './i18n';
 import type { HostStatus } from './types';
@@ -12,6 +13,7 @@ type View = 'dashboard' | 'connectors';
 export default function App() {
   const { t, lang, setLang } = useT();
   const [view, setView] = useState<View>('dashboard');
+  const [selectedHostname, setSelectedHostname] = useState<string | null>(null);
   const [hosts, setHosts] = useState<HostStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export default function App() {
         <nav className="app-nav">
           <button
             className={`nav-tab ${view === 'dashboard' ? 'active' : ''}`}
-            onClick={() => setView('dashboard')}
+            onClick={() => { setView('dashboard'); setSelectedHostname(null); }}
           >
             {t.app.nav.dashboard}
           </button>
@@ -83,7 +85,12 @@ export default function App() {
         </div>
       </header>
       <main>
-        {view === 'dashboard' && <Dashboard hosts={hosts} loading={loading} error={error} />}
+        {view === 'dashboard' && !selectedHostname && (
+          <Dashboard hosts={hosts} loading={loading} error={error} onSelectHost={setSelectedHostname} />
+        )}
+        {view === 'dashboard' && selectedHostname && (
+          <HostDetailPage hostname={selectedHostname} onBack={() => { setSelectedHostname(null); load(); }} />
+        )}
         {view === 'connectors' && <ConnectorsPage />}
       </main>
       {showWizard && (

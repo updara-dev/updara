@@ -43,6 +43,20 @@ export interface Translations {
     generate: string;
     done: string;
   };
+  hostDetail: {
+    back: string;
+    agentOnline: string;
+    agentStale: string;
+    agentOffline: string;
+    lastSeen: (s: string) => string;
+    ignore: string;
+    unignore: string;
+    ignoredLabel: string;
+    commandHistory: string;
+    noCommands: string;
+    showOutput: string;
+    hideOutput: string;
+  };
   connectors: {
     title: string;
     subtitle: string;

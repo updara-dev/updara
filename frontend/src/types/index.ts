@@ -15,6 +15,14 @@ export interface CheckResult {
   changelog: string;
   error?: string;
   checked_at: string;
+  ignored?: boolean;
+  ignored_items?: string[];
+}
+
+export interface HostDetail {
+  host: Host;
+  results: CheckResult[];
+  commands: Command[];
 }
 
 export interface HostStatus {

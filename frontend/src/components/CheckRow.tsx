@@ -41,8 +41,8 @@ export function CheckRow({ result, hostname }: Props) {
     }
   };
 
-  const state = result.error ? 'error' : result.update_available ? 'update' : 'ok';
-  const icon  = state === 'error' ? '❌' : state === 'update' ? '⚠️' : '✅';
+  const state = result.ignored ? 'ignored' : result.error ? 'error' : result.update_available ? 'update' : 'ok';
+  const icon  = state === 'ignored' ? '🔕' : state === 'error' ? '❌' : state === 'update' ? '⚠️' : '✅';
 
   const valueLabel = Object.entries(result.values ?? {})
     .map(([k, v]) => `${k}: ${v}`)
@@ -72,10 +72,13 @@ export function CheckRow({ result, hostname }: Props) {
         <span className="check-row__icon">{icon}</span>
         <div className="check-row__body">
           <span className="check-row__name">{result.display_name || result.connector}</span>
-          {result.error && (
+          {result.ignored && (
+            <span className="check-row__detail check-row__detail--muted">Ignored</span>
+          )}
+          {!result.ignored && result.error && (
             <span className="check-row__detail check-row__detail--error">{result.error}</span>
           )}
-          {!result.error && valueLabel && (
+          {!result.ignored && !result.error && valueLabel && (
             <span className="check-row__detail">{valueLabel}</span>
           )}
         </div>

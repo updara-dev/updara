@@ -4,6 +4,7 @@ import { useT } from '../i18n';
 
 interface Props {
   status: HostStatus;
+  onClick?: () => void;
 }
 
 function cardColor(status: HostStatus): string {
@@ -13,7 +14,7 @@ function cardColor(status: HostStatus): string {
   return 'var(--color-ok)';
 }
 
-export function HostCard({ status }: Props) {
+export function HostCard({ status, onClick }: Props) {
   const { t } = useT();
   const { host, results } = status;
   const color = cardColor(status);
@@ -26,7 +27,14 @@ export function HostCard({ status }: Props) {
   }, {});
 
   return (
-    <div className="host-card" style={{ borderTop: `3px solid ${color}` }}>
+    <div
+      className={`host-card${onClick ? ' host-card--clickable' : ''}`}
+      style={{ borderTop: `3px solid ${color}` }}
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest('button, a')) return;
+        onClick?.();
+      }}
+    >
       <div className="host-card__header">
         <div className="host-card__title">
           <span className="host-card__dot" style={{ background: color }} />

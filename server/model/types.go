@@ -19,6 +19,8 @@ type CheckResult struct {
 	Changelog       string            `json:"changelog"`
 	Error           string            `json:"error,omitempty"`
 	CheckedAt       time.Time         `json:"checked_at"`
+	Ignored         bool              `json:"ignored,omitempty"`
+	IgnoredItems    []string          `json:"ignored_items,omitempty"`
 }
 
 type ReportRequest struct {

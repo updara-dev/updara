@@ -33,6 +33,7 @@ func (h *Handler) Router() http.Handler {
 
 	// Dashboard data
 	mux.HandleFunc("GET /api/v1/hosts", h.hosts)
+	mux.HandleFunc("GET /api/v1/hosts/{hostname}", h.hostDetail)
 	mux.HandleFunc("GET /api/v1/connectors", h.listConnectors)
 
 	// Update commands
@@ -40,6 +41,10 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/hosts/{hostname}/commands/pending", h.pendingCommands)
 	mux.HandleFunc("GET /api/v1/hosts/{hostname}/commands", h.hostCommands)
 	mux.HandleFunc("POST /api/v1/commands/{id}/result", h.commandResult)
+
+	// Ignore rules
+	mux.HandleFunc("POST /api/v1/hosts/{hostname}/ignore/{connector}", h.ignoreConnector)
+	mux.HandleFunc("DELETE /api/v1/hosts/{hostname}/ignore/{connector}", h.unignoreConnector)
 
 	// Host provisioning
 	mux.HandleFunc("POST /api/v1/provisions", h.createProvision)
@@ -85,6 +90,38 @@ func (h *Handler) hosts(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) healthz(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) hostDetail(w http.ResponseWriter, r *http.Request) {
+	hostname := r.PathValue("hostname")
+	status, ok := h.store.GetHostStatus(hostname)
+	if !ok {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	cmds := h.store.HostCommands(hostname)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"host":     status.Host,
+		"results":  status.Results,
+		"commands": cmds,
+	})
+}
+
+func (h *Handler) ignoreConnector(w http.ResponseWriter, r *http.Request) {
+	hostname := r.PathValue("hostname")
+	connector := r.PathValue("connector")
+	item := r.URL.Query().Get("item")
+	h.store.SetIgnored(hostname, connector, item, true)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) unignoreConnector(w http.ResponseWriter, r *http.Request) {
+	hostname := r.PathValue("hostname")
+	connector := r.PathValue("connector")
+	item := r.URL.Query().Get("item")
+	h.store.SetIgnored(hostname, connector, item, false)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func cors(next http.Handler) http.Handler {

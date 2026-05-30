@@ -1,4 +1,4 @@
-import type { HostStatus, Command } from '../types';
+import type { HostStatus, HostDetail, Command } from '../types';
 
 const BASE = import.meta.env.VITE_SERVER_URL ?? '';
 
@@ -71,3 +71,16 @@ export const triggerUpdate = (hostname: string, connector: string) =>
 
 export const fetchCommands = (hostname: string) =>
   request<Command[]>(`/api/v1/hosts/${encodeURIComponent(hostname)}/commands`);
+
+export const fetchHostDetail = (hostname: string) =>
+  request<HostDetail>(`/api/v1/hosts/${encodeURIComponent(hostname)}`);
+
+export const ignoreConnector = (hostname: string, connector: string, item?: string) =>
+  request<void>(`/api/v1/hosts/${encodeURIComponent(hostname)}/ignore/${encodeURIComponent(connector)}${item != null ? `?item=${encodeURIComponent(item)}` : ''}`, {
+    method: 'POST',
+  });
+
+export const unignoreConnector = (hostname: string, connector: string, item?: string) =>
+  request<void>(`/api/v1/hosts/${encodeURIComponent(hostname)}/ignore/${encodeURIComponent(connector)}${item != null ? `?item=${encodeURIComponent(item)}` : ''}`, {
+    method: 'DELETE',
+  });

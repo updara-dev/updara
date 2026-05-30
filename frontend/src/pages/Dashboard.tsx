@@ -6,9 +6,10 @@ interface Props {
   hosts: HostStatus[];
   loading: boolean;
   error: string | null;
+  onSelectHost: (hostname: string) => void;
 }
 
-export function Dashboard({ hosts, loading, error }: Props) {
+export function Dashboard({ hosts, loading, error, onSelectHost }: Props) {
   const { t } = useT();
 
   if (loading && hosts.length === 0) {
@@ -27,7 +28,9 @@ export function Dashboard({ hosts, loading, error }: Props) {
   }
   return (
     <div className="host-grid">
-      {hosts.map(h => <HostCard key={h.host.id} status={h} />)}
+      {hosts.map(h => (
+        <HostCard key={h.host.id} status={h} onClick={() => onSelectHost(h.host.hostname)} />
+      ))}
     </div>
   );
 }

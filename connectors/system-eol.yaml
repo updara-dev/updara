@@ -115,20 +115,7 @@ update:
       echo "Direct upgrade is not possible for this release."
       echo "This OS is End-of-Life and requires a fresh install."
       # Dynamically fetch the current latest supported LTS
-      LATEST=$(python3 -c "
-import json
-try:
-    from urllib.request import urlopen
-    import datetime
-    data = json.loads(urlopen('https://endoflife.date/api/ubuntu.json', timeout=5).read())
-    today = datetime.date.today()
-    lts = [v for v in data if v.get('lts') and v.get('eol') and datetime.date.fromisoformat(str(v['eol'])) > today]
-    lts.sort(key=lambda v: v.get('releaseDate',''), reverse=True)
-    if lts:
-        v = lts[0]
-        print(f\"{v['latest']} ({v.get('codename', '')})\")
-except: print('latest LTS')
-" 2>/dev/null)
+      LATEST=$(python3 -c "import json,datetime;from urllib.request import urlopen;d=json.loads(urlopen('https://endoflife.date/api/ubuntu.json',timeout=5).read());t=datetime.date.today();l=sorted([v for v in d if v.get('lts') and v.get('eol') and datetime.date.fromisoformat(str(v['eol']))>t],key=lambda v:v.get('releaseDate',''),reverse=True);print(l[0]['latest']+' ('+l[0].get('codename','')+')' if l else 'latest LTS')" 2>/dev/null)
       echo "Recommended: Fresh install of Ubuntu $LATEST"
       echo "https://ubuntu.com/download/server"
       exit 1
