@@ -45,8 +45,11 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <div className="app-header__brand">
-          <h1>Updara</h1>
+        <div
+          className="app-header__brand app-header__brand--clickable"
+          onClick={() => { setView('dashboard'); setSelectedHostname(null); }}
+        >
+          <img src="/updara_logo.svg" alt="Updara" className="app-header__logo" />
           <span className="app-header__tagline">{t.app.tagline}</span>
         </div>
         <nav className="app-nav">

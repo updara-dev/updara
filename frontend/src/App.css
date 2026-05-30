@@ -44,6 +44,15 @@ body {
   letter-spacing: -0.03em;
 }
 
+.app-header__brand--clickable { cursor: pointer; }
+.app-header__brand--clickable:hover .app-header__logo { opacity: 0.85; }
+
+.app-header__logo {
+  height: 32px;
+  width: auto;
+  display: block;
+}
+
 .app-header__tagline {
   font-size: 0.75rem;
   color: var(--text-muted);
