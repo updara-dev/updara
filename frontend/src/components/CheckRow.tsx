@@ -19,6 +19,7 @@ export function CheckRow({ result, hostname, isSelected, onToggleSelect }: Props
   const [cmd, setCmd] = useState<Command | null>(null);
   const [showOutput, setShowOutput] = useState(false);
 
+  // Poll while a known command is in-flight
   useEffect(() => {
     if (!cmd || cmd.status === 'done' || cmd.status === 'failed') return;
     const id = setInterval(async () => {
@@ -26,13 +27,27 @@ export function CheckRow({ result, hostname, isSelected, onToggleSelect }: Props
       const latest = cmds.find(c => c.id === cmd.id);
       if (latest) {
         setCmd(latest);
-        if (latest.status === 'done' || latest.status === 'failed') {
-          setShowOutput(true);
-        }
+        if (latest.status === 'done' || latest.status === 'failed') setShowOutput(true);
       }
     }, 3000);
     return () => clearInterval(id);
   }, [cmd, hostname]);
+
+  // When no local cmd, poll for externally-triggered commands (e.g. bulk update)
+  useEffect(() => {
+    if (cmd || !result.update_available) return;
+    const check = async () => {
+      const cmds = await fetchCommands(hostname).catch(() => [] as Command[]);
+      const active = cmds.find(c =>
+        c.connector === result.connector &&
+        (c.status === 'pending' || c.status === 'running')
+      );
+      if (active) setCmd(active);
+    };
+    check();
+    const id = setInterval(check, 4000);
+    return () => clearInterval(id);
+  }, [cmd, hostname, result.connector, result.update_available]);
 
   const handleUpdate = async () => {
     try {

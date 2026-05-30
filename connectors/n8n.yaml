@@ -27,13 +27,16 @@ check:
         print("error=n8n container not found (is it running?)")
         sys.exit(0)
 
-    # Current version from container
-    ver = subprocess.run(
-        ['docker', 'exec', container, 'node', '-e',
-         "try{process.stdout.write(require('/usr/local/lib/node_modules/n8n/package.json').version)}catch(e){process.stdout.write('unknown')}"],
-        capture_output=True, text=True, timeout=10
-    )
-    current = ver.stdout.strip() or 'unknown'
+    # Current version — try n8n CLI first, fall back to package.json
+    ver = subprocess.run(['docker', 'exec', container, 'n8n', '--version'],
+                         capture_output=True, text=True, timeout=10)
+    current = ver.stdout.strip()
+    if not current:
+        ver2 = subprocess.run(
+            ['docker', 'exec', container, 'node', '-e',
+             "try{process.stdout.write(require('/usr/local/lib/node_modules/n8n/package.json').version)}catch(e){process.stdout.write('unknown')}"],
+            capture_output=True, text=True, timeout=10)
+        current = ver2.stdout.strip() or 'unknown'
 
     # Detect if compose-managed
     label = subprocess.run(
@@ -52,7 +55,8 @@ check:
         req = Request('https://api.github.com/repos/n8n-io/n8n/releases/latest',
                       headers={'User-Agent': 'updara-agent/1.0'})
         data = json.loads(urlopen(req, timeout=10).read())
-        latest = data['tag_name'].lstrip('n')
+        tag = data['tag_name']  # format: "n8n@2.22.5" or "n1.x.x"
+        latest = tag.split('@')[-1] if '@' in tag else tag.lstrip('n')
     except Exception as e:
         print(f"current=v{current}")
         print(f"error=GitHub API: {e}")
@@ -68,7 +72,7 @@ check:
     latest:      "$latest"
     compose_dir: "$compose_dir"
     standalone:  "$standalone"
-  update_available: "update_available == 'true'"
+  update_available: "current != latest"
   interval: 3600
 
 update:

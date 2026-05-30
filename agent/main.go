@@ -81,13 +81,15 @@ func main() {
 	}
 
 	// Sync connector YAMLs from server on startup (after 10s) and every hour.
-	// If any changed, exit 0 so systemd restarts with fresh connectors.
-	// Manual trigger: systemctl restart updara-agent
+	// Also discovers new connectors added to the server after provisioning.
+	// If anything changed, exit 0 so systemd restarts with fresh connectors.
 	go func() {
 		time.Sleep(10 * time.Second)
 		for {
-			if changed := syncConnectors(serverURL, connDir, connectors); changed > 0 {
-				log.Printf("connector sync: %d connector(s) updated — restarting", changed)
+			changed := syncConnectors(serverURL, connDir, connectors)
+			changed += discoverConnectors(serverURL, connDir)
+			if changed > 0 {
+				log.Printf("connector sync: %d connector(s) updated/added — restarting", changed)
 				os.Exit(0)
 			}
 			time.Sleep(time.Duration(syncInterval) * time.Second)
@@ -315,6 +317,44 @@ func selfUninstall() {
 	exec.Command("sh", "-c", fmt.Sprintf("sleep 2; rm -f %q", exe)).Start()
 	log.Printf("uninstall complete")
 	os.Exit(0)
+}
+
+// discoverConnectors downloads connector YAMLs that exist on the server but
+// are not yet present on disk. Called after syncConnectors each cycle.
+func discoverConnectors(serverURL, connDir string) int {
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Get(serverURL + "/api/v1/connectors")
+	if err != nil {
+		return 0
+	}
+	defer resp.Body.Close()
+	var meta []struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&meta); err != nil {
+		return 0
+	}
+	added := 0
+	for _, m := range meta {
+		localPath := filepath.Join(connDir, m.Name+".yaml")
+		if _, err := os.Stat(localPath); err == nil {
+			continue // already exists
+		}
+		yamlResp, err := client.Get(fmt.Sprintf("%s/api/v1/connectors/%s/yaml", serverURL, m.Name))
+		if err != nil || yamlResp.StatusCode != http.StatusOK {
+			if yamlResp != nil {
+				yamlResp.Body.Close()
+			}
+			continue
+		}
+		data, _ := io.ReadAll(yamlResp.Body)
+		yamlResp.Body.Close()
+		if writeErr := os.WriteFile(localPath, data, 0644); writeErr == nil {
+			log.Printf("connector sync: discovered new connector %s", m.Name)
+			added++
+		}
+	}
+	return added
 }
 
 func localIP() string {
