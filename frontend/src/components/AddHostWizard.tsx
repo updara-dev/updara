@@ -12,6 +12,7 @@ const SERVICE_TEMPLATES: { keywords: string[]; label: string; connectors: string
   { keywords: ['proxmox', 'pve'],                  label: 'Proxmox VE',      connectors: ['apt', 'system'] },
   { keywords: ['homeassistant', 'home-assistant'], label: 'Home Assistant',  connectors: ['system'] },
   { keywords: ['nginx', 'caddy', 'traefik'],       label: 'Reverse Proxy',   connectors: ['apt', 'system'] },
+  { keywords: ['n8n'],                              label: 'n8n',             connectors: ['system', 'docker-images'] },
   { keywords: ['docker'],                          label: 'Docker Host',     connectors: ['system', 'docker-images'] },
   { keywords: ['debian', 'ubuntu', 'server'],      label: 'Linux Server',    connectors: ['apt', 'system'] },
 ];
@@ -42,6 +43,7 @@ export function AddHostWizard({ onClose }: Props) {
   const [installCmd, setInstallCmd] = useState('');
   const [copied, setCopied] = useState(false);
   const [lastTemplate, setLastTemplate] = useState<string | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchConnectors().then(setConnectors).catch(console.error);
@@ -171,22 +173,39 @@ export function AddHostWizard({ onClose }: Props) {
                           )}
                         </div>
                       </div>
-                      {selected[c.name] && (c.vars ?? []).length > 0 && (
-                        <div className="connector-vars">
-                          {c.vars.map(v => (
-                            <label key={v.name}>
-                              <span>{v.name}{v.required && ' *'}</span>
-                              {v.description && <small>{v.description}</small>}
-                              <input
-                                className="wizard-input"
-                                value={vars[c.name]?.[v.name] ?? v.default ?? ''}
-                                onChange={e => setVar(c.name, v.name, e.target.value)}
-                                placeholder={v.default || v.name}
-                              />
-                            </label>
-                          ))}
-                        </div>
-                      )}
+                      {selected[c.name] && (c.vars ?? []).length > 0 && (() => {
+                        const requiredVars = c.vars.filter(v => v.required);
+                        const optionalVars = c.vars.filter(v => !v.required);
+                        const isOpen = advancedOpen[c.name] ?? false;
+                        const renderVar = (v: typeof c.vars[0]) => (
+                          <label key={v.name}>
+                            <span>{v.name}{v.required && ' *'}</span>
+                            {v.description && <small>{v.description}</small>}
+                            <input
+                              className="wizard-input"
+                              value={vars[c.name]?.[v.name] ?? ''}
+                              onChange={e => setVar(c.name, v.name, e.target.value)}
+                              placeholder={v.default || v.name}
+                            />
+                          </label>
+                        );
+                        return (
+                          <div className="connector-vars">
+                            {requiredVars.map(renderVar)}
+                            {optionalVars.length > 0 && (
+                              <>
+                                <button
+                                  className="connector-vars-advanced-btn"
+                                  onClick={e => { e.stopPropagation(); setAdvancedOpen(p => ({ ...p, [c.name]: !p[c.name] })); }}
+                                >
+                                  Advanced {isOpen ? '▲' : '▼'}
+                                </button>
+                                {isOpen && optionalVars.map(renderVar)}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>

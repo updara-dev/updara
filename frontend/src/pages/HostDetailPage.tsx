@@ -159,11 +159,13 @@ function ResultRow({
   hostname,
   onToggleIgnore,
   onRemove,
+  onCommandComplete,
 }: {
   result: CheckResult;
   hostname: string;
   onToggleIgnore: (connector: string, item: string | undefined, ignored: boolean) => Promise<void>;
   onRemove: (connector: string) => Promise<void>;
+  onCommandComplete: () => void;
 }) {
   const { t } = useT();
   const [busy, setBusy] = useState(false);
@@ -171,7 +173,11 @@ function ResultRow({
   const [rescanning, setRescanning] = useState(false);
 
   useEffect(() => {
-    if (!cmd || cmd.status === 'done' || cmd.status === 'failed') return;
+    if (!cmd) return;
+    if (cmd.status === 'done' || cmd.status === 'failed') {
+      onCommandComplete();
+      return;
+    }
     const id = setInterval(async () => {
       const cmds = await fetchCommands(hostname).catch(() => [] as Command[]);
       const latest = cmds.find(c => c.id === cmd.id);
@@ -474,6 +480,7 @@ export function HostDetailPage({ hostname, onBack }: Props) {
                 hostname={hostname}
                 onToggleIgnore={handleToggleIgnore}
                 onRemove={handleRemove}
+                onCommandComplete={load}
               />
             ))}
           </div>
