@@ -1,0 +1,163 @@
+name: portainer-api
+display_name: Portainer (API)
+category: infrastructure
+docs: https://docs.portainer.io/api/docs
+
+# Central Portainer management via API.
+# Use this instead of (or alongside) docker-images if you manage stacks through Portainer.
+# Checks all Portainer stacks for outdated images and redeploys via API (keeps Portainer in sync).
+vars:
+  - name: PORTAINER_URL
+    description: Portainer base URL (no trailing slash)
+    required: true
+    default: http://localhost:9000
+  - name: PORTAINER_TOKEN
+    description: Portainer API token (Settings → Users → API tokens)
+    required: true
+    default: ""
+
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, json, sys, os
+    try:
+        from urllib.request import urlopen, Request
+        from urllib.error import URLError, HTTPError
+    except ImportError:
+        print("count=0")
+        sys.exit(0)
+
+    base_url = os.environ.get('PORTAINER_URL', 'http://localhost:9000').rstrip('/')
+    token    = os.environ.get('PORTAINER_TOKEN', '')
+
+    if not token:
+        print("count=0")
+        print("error=PORTAINER_TOKEN not set")
+        sys.exit(0)
+
+    def api(path):
+        req = Request(f'{base_url}{path}',
+                      headers={'X-API-Key': token, 'Content-Type': 'application/json'})
+        try:
+            return json.loads(urlopen(req, timeout=15).read())
+        except HTTPError as e:
+            return None
+        except Exception:
+            return None
+
+    # Get all stacks
+    stacks = api('/api/stacks')
+    if stacks is None:
+        print("count=0")
+        print("error=Cannot reach Portainer API")
+        sys.exit(0)
+
+    outdated = []
+    for stack in stacks:
+        stack_id   = stack.get('Id')
+        stack_name = stack.get('Name', str(stack_id))
+
+        # Get services/images from stack
+        services = api(f'/api/stacks/{stack_id}/file')
+        if not services:
+            continue
+
+        # Extract image names from compose content
+        compose_content = services.get('StackFileContent', '')
+        import re
+        images = re.findall(r'^\s+image:\s+(\S+)', compose_content, re.MULTILINE)
+
+        for image in images:
+            if '.' in image.split('/')[0]:   # skip non-Docker-Hub
+                continue
+            repo, tag = (image.rsplit(':', 1) if ':' in image.split('/')[-1] else (image, 'latest'))
+            if '/' not in repo:
+                repo = 'library/' + repo
+            try:
+                token_url = f'https://auth.docker.io/token?service=registry.docker.io&scope=repository:{repo}:pull'
+                hub_token = json.loads(urlopen(token_url, timeout=10).read())['token']
+                req2 = Request(
+                    f'https://registry-1.docker.io/v2/{repo}/manifests/{tag}',
+                    headers={'Authorization': f'Bearer {hub_token}',
+                             'Accept': 'application/vnd.docker.distribution.manifest.v2+json'}
+                )
+                resp = urlopen(req2, timeout=10)
+                remote_digest = resp.headers.get('Docker-Content-Digest', '')
+
+                local = subprocess.run(
+                    ['docker', 'inspect', '--format', '{{index .RepoDigests 0}}', image],
+                    capture_output=True, text=True
+                ).stdout.strip()
+
+                if remote_digest and local and remote_digest not in local:
+                    if stack_name not in outdated:
+                        outdated.append(stack_name)
+                    break
+            except Exception:
+                pass
+
+    print(f'count={len(outdated)}')
+    if outdated:
+        print(f'outdated={",".join(outdated)}')
+    print(f'stacks={len(stacks)}')
+    PYEOF
+  parse:
+    count:   "$count"
+    outdated: "$outdated"
+    stacks:  "$stacks"
+  update_available: "count > 0"
+  interval: 3600
+
+update:
+  type: shell
+  # Redeploys all outdated stacks via Portainer API (keeps Portainer in sync).
+  command: |
+    python3 - <<'PYEOF'
+    import json, os, sys
+    try:
+        from urllib.request import urlopen, Request
+        from urllib.error import HTTPError
+        import urllib.parse
+    except ImportError:
+        sys.exit(1)
+
+    base_url = os.environ.get('PORTAINER_URL', 'http://localhost:9000').rstrip('/')
+    token    = os.environ.get('PORTAINER_TOKEN', '')
+    outdated = os.environ.get('outdated', '').split(',')
+
+    def api(path, method='GET', data=None):
+        body = json.dumps(data).encode() if data else None
+        req = Request(f'{base_url}{path}', data=body,
+                      headers={'X-API-Key': token, 'Content-Type': 'application/json'},
+                      method=method)
+        try:
+            resp = urlopen(req, timeout=60)
+            return json.loads(resp.read()) if resp.status != 204 else {}
+        except Exception as e:
+            print(f'API error {path}: {e}')
+            return None
+
+    stacks = api('/api/stacks') or []
+    endpoints = api('/api/endpoints') or []
+    endpoint_id = endpoints[0]['Id'] if endpoints else 1
+
+    for stack in stacks:
+        name = stack.get('Name', '')
+        if name not in outdated:
+            continue
+        stack_id = stack['Id']
+        print(f'[Portainer] Redeploying stack: {name}')
+        result = api(f'/api/stacks/{stack_id}?endpointId={endpoint_id}',
+                     method='PUT',
+                     data={'pullImage': True, 'prune': False,
+                           'stackFileContent': (api(f'/api/stacks/{stack_id}/file') or {}).get('StackFileContent', '')})
+        if result is not None:
+            print(f'[Portainer] {name}: redeployed')
+        else:
+            print(f'[Portainer] {name}: failed')
+    PYEOF
+  requires_confirmation: true
+
+notifications:
+  changelog: ""

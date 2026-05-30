@@ -20,10 +20,11 @@ check:
         print("count=0")
         sys.exit(0)
 
-    # Auto-discover docker-compose.yml files
+    # Auto-discover docker-compose.yml files (including Portainer-managed stacks)
     find_result = subprocess.run(
         ['find', '/opt', '/root', '/home', '/srv', '/docker',
-         '-maxdepth', '4', '-name', 'docker-compose.yml', '-o', '-name', 'docker-compose.yaml'],
+         '/var/lib/docker/volumes/portainer_portainer_data/_data/compose',
+         '-maxdepth', '5', '-name', 'docker-compose.yml', '-o', '-name', 'docker-compose.yaml'],
         capture_output=True, text=True
     )
     compose_dirs = list({os.path.dirname(p) for p in find_result.stdout.strip().split('\n') if p})
@@ -92,7 +93,9 @@ update:
   type: shell
   # Auto-discovers all docker-compose.yml locations and updates each stack.
   command: |
-    find /opt /root /home /srv /docker -maxdepth 4 \( -name "docker-compose.yml" -o -name "docker-compose.yaml" \) 2>/dev/null \
+    find /opt /root /home /srv /docker \
+      /var/lib/docker/volumes/portainer_portainer_data/_data/compose \
+      -maxdepth 5 \( -name "docker-compose.yml" -o -name "docker-compose.yaml" \) 2>/dev/null \
       | xargs -I{} dirname {} | sort -u \
       | while read dir; do
           echo "[Updara] Updating stack in $dir"

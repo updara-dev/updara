@@ -1,0 +1,127 @@
+name: system-eol
+display_name: OS End-of-Life
+category: system
+docs: https://endoflife.date
+
+vars: []
+
+# Checks whether the operating system has reached End-of-Life using the endoflife.date API.
+# Supports: Ubuntu, Debian, Raspbian, Alpine, Fedora, CentOS, Rocky Linux, and more.
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import sys, os, json, datetime
+    try:
+        from urllib.request import urlopen, Request
+        from urllib.error import URLError
+    except ImportError:
+        print("status=unknown")
+        sys.exit(0)
+
+    # Read distro info
+    info = {}
+    try:
+        with open('/etc/os-release') as f:
+            for line in f:
+                line = line.strip()
+                if '=' in line:
+                    k, v = line.split('=', 1)
+                    info[k] = v.strip('"')
+    except Exception:
+        print("status=unknown")
+        sys.exit(0)
+
+    distro_id      = info.get('ID', '').lower()
+    version_id     = info.get('VERSION_ID', '').strip('"')
+    distro_name    = info.get('PRETTY_NAME', f'{distro_id} {version_id}')
+
+    if not distro_id or not version_id:
+        print("status=unknown")
+        sys.exit(0)
+
+    # Normalize: raspbian → raspberry-pi-os, etc.
+    api_id = {
+        'raspbian': 'raspberry-pi-os',
+        'centos':   'centos',
+        'rocky':    'rocky-linux',
+    }.get(distro_id, distro_id)
+
+    try:
+        url = f'https://endoflife.date/api/{api_id}/{version_id}.json'
+        data = json.loads(urlopen(url, timeout=10).read())
+        eol_raw = data.get('eol', False)
+
+        if eol_raw is False:
+            print("status=supported")
+            print(f'distro={distro_name}')
+            sys.exit(0)
+
+        if eol_raw is True:
+            eol_date = 'unknown'
+            days = 0
+        else:
+            eol_date = str(eol_raw)
+            try:
+                eol_dt = datetime.date.fromisoformat(eol_date)
+                days = (datetime.date.today() - eol_dt).days
+            except Exception:
+                days = 0
+
+        if days > 0:
+            print("status=eol")
+            print(f'eol_date={eol_date}')
+            print(f'days_eol={days}')
+        else:
+            print("status=supported")
+        print(f'distro={distro_name}')
+
+    except Exception:
+        # API unreachable or distro not in database — don't false-alarm
+        print("status=unknown")
+        print(f'distro={distro_name}')
+    PYEOF
+  parse:
+    status:   "$status"
+    distro:   "$distro"
+    eol_date: "$eol_date"
+    days_eol: "$days_eol"
+  update_available: "status == eol"
+  interval: 86400
+
+# WARNING: OS upgrades are complex, time-consuming, and can break systems.
+# Only use this if you know what you are doing.
+# For Ubuntu: requires do-release-upgrade to be installed.
+# The process can take 20-40 minutes and must not be interrupted.
+update:
+  type: shell
+  command: |
+    DISTRO=$(grep ^ID= /etc/os-release | cut -d= -f2 | tr -d '"')
+    VERSION=$(grep ^VERSION_ID= /etc/os-release | cut -d= -f2 | tr -d '"')
+    PRETTY=$(grep ^PRETTY_NAME= /etc/os-release | cut -d= -f2 | tr -d '"')
+    echo "Current OS: $PRETTY"
+    echo ""
+    if ! command -v do-release-upgrade >/dev/null 2>&1; then
+      echo "ERROR: do-release-upgrade not found."
+      echo "Install: apt install ubuntu-release-upgrader-core"
+      exit 1
+    fi
+    echo "Checking available upgrade path..."
+    RESULT=$(do-release-upgrade -c 2>&1)
+    echo "$RESULT"
+    if echo "$RESULT" | grep -q "not supported"; then
+      echo ""
+      echo "MANUAL ACTION REQUIRED:"
+      echo "Direct upgrade is not possible for this release."
+      echo "This OS is End-of-Life and requires a fresh install."
+      echo "Recommended: Install Ubuntu 24.04 LTS (Noble Numbat)"
+      echo "https://ubuntu.com/download/server"
+      exit 1
+    fi
+    echo ""
+    echo "Starting upgrade (this may take 20-40 minutes)..."
+    DEBIAN_FRONTEND=noninteractive do-release-upgrade -f DistUpgradeViewNonInteractive
+  requires_confirmation: true
+
+notifications:
+  changelog: "https://endoflife.date"

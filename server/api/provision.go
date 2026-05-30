@@ -281,6 +281,21 @@ func (h *Handler) deleteConnector(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	// Queue removal command for every connected host
+	deleteCmd := fmt.Sprintf("rm -f /etc/updara/connectors/%s.yaml", name)
+	for _, host := range h.store.AllHosts() {
+		b := make([]byte, 8)
+		rand.Read(b)
+		h.store.AddCommand(model.Command{
+			ID:        hex.EncodeToString(b),
+			HostID:    host.Host.Hostname,
+			Connector: name,
+			Cmd:       deleteCmd,
+			Status:    model.CmdStatusPending,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		})
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -270,7 +270,19 @@ func syncConnectors(serverURL, connDir string, connectors []connector.Connector)
 		}
 		remote, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		if err != nil || resp.StatusCode != http.StatusOK {
+		if err != nil {
+			log.Printf("connector sync: read %s: %v", c.Name, err)
+			continue
+		}
+		// Server explicitly deleted this connector — safe to remove local copy
+		if resp.StatusCode == http.StatusNotFound {
+			localPath := filepath.Join(connDir, c.Name+".yaml")
+			os.Remove(localPath)
+			log.Printf("connector sync: removed %s (deleted on server)", c.Name)
+			changed++
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
 			log.Printf("connector sync: bad response for %s: status=%d", c.Name, resp.StatusCode)
 			continue
 		}

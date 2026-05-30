@@ -92,8 +92,10 @@ export function CheckRow({ result, hostname }: Props) {
           )}
         </div>
       </div>
-      {showOutput && cmd?.output && (
-        <pre className="cmd-output">{stripAnsi(cmd.output)}</pre>
+      {showOutput && (
+        <pre className="cmd-output">
+          {cmd?.output ? stripAnsi(cmd.output) : '(no output)'}
+        </pre>
       )}
     </div>
   );
