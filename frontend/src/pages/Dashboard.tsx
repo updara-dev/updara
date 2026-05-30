@@ -1,5 +1,6 @@
 import type { HostStatus } from '../types';
 import { HostCard } from '../components/HostCard';
+import { useT } from '../i18n';
 
 interface Props {
   hosts: HostStatus[];
@@ -8,17 +9,19 @@ interface Props {
 }
 
 export function Dashboard({ hosts, loading, error }: Props) {
+  const { t } = useT();
+
   if (loading && hosts.length === 0) {
-    return <p className="status-msg">Loading…</p>;
+    return <p className="status-msg">{t.dashboard.loading}</p>;
   }
   if (error) {
-    return <p className="status-msg status-msg--error">Error: {error}</p>;
+    return <p className="status-msg status-msg--error">{t.dashboard.error(error)}</p>;
   }
   if (hosts.length === 0) {
     return (
       <div className="status-msg">
-        <p>No hosts reporting yet.</p>
-        <p>Deploy an agent and point it to this server to get started.</p>
+        <p>{t.dashboard.noHosts}</p>
+        <p>{t.dashboard.noHostsHint}</p>
       </div>
     );
   }

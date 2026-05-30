@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -20,9 +21,10 @@ import (
 )
 
 const (
-	defaultInterval = 3600
-	reportInterval  = 60
-	agentVersion    = "0.1.0"
+	defaultInterval  = 3600
+	reportInterval   = 60
+	syncInterval     = 3600 // check for connector updates every hour
+	agentVersion     = "0.1.0"
 )
 
 func main() {
@@ -76,6 +78,20 @@ func main() {
 			}
 		}()
 	}
+
+	// Sync connector YAMLs from server on startup (after 10s) and every hour.
+	// If any changed, exit 0 so systemd restarts with fresh connectors.
+	// Manual trigger: systemctl restart updara-agent
+	go func() {
+		time.Sleep(10 * time.Second)
+		for {
+			if changed := syncConnectors(serverURL, connDir, connectors); changed > 0 {
+				log.Printf("connector sync: %d connector(s) updated — restarting", changed)
+				os.Exit(0)
+			}
+			time.Sleep(time.Duration(syncInterval) * time.Second)
+		}
+	}()
 
 	// Poll for pending commands every 3s.
 	// After a successful update, immediately re-check the affected connector.
@@ -238,6 +254,38 @@ func mustHostname() string {
 		return "unknown"
 	}
 	return h
+}
+
+// syncConnectors fetches each connector YAML from the server, compares with
+// the local file, and overwrites any that differ. Returns the number changed.
+func syncConnectors(serverURL, connDir string, connectors []connector.Connector) int {
+	client := &http.Client{Timeout: 15 * time.Second}
+	changed := 0
+	for _, c := range connectors {
+		url := fmt.Sprintf("%s/api/v1/connectors/%s/yaml", serverURL, c.Name)
+		resp, err := client.Get(url)
+		if err != nil {
+			log.Printf("connector sync: fetch %s: %v", c.Name, err)
+			continue
+		}
+		remote, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil || resp.StatusCode != http.StatusOK {
+			log.Printf("connector sync: bad response for %s: status=%d", c.Name, resp.StatusCode)
+			continue
+		}
+		localPath := filepath.Join(connDir, c.Name+".yaml")
+		local, err := os.ReadFile(localPath)
+		if err != nil || !bytes.Equal(local, remote) {
+			if writeErr := os.WriteFile(localPath, remote, 0644); writeErr != nil {
+				log.Printf("connector sync: write %s: %v", c.Name, writeErr)
+				continue
+			}
+			log.Printf("connector sync: updated %s", c.Name)
+			changed++
+		}
+	}
+	return changed
 }
 
 func localIP() string {

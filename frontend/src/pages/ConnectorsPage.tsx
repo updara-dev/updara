@@ -6,6 +6,7 @@ import {
   deleteConnector,
   type ConnectorMeta,
 } from '../api/client';
+import { useT } from '../i18n';
 
 const NEW_CONNECTOR_TEMPLATE = `name: my-connector
 display_name: My Connector
@@ -34,6 +35,7 @@ interface EditorState {
 }
 
 export function ConnectorsPage() {
+  const { t } = useT();
   const [connectors, setConnectors] = useState<ConnectorMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [editor, setEditor] = useState<EditorState | null>(null);
@@ -57,7 +59,7 @@ export function ConnectorsPage() {
       setEditor({ name, yaml, isNew: false });
       setSaveError('');
     } catch (e) {
-      alert('Connector konnte nicht geladen werden: ' + e);
+      alert(t.connectors.loadError(String(e)));
     }
   };
 
@@ -71,13 +73,12 @@ export function ConnectorsPage() {
     setSaving(true);
     setSaveError('');
 
-    // Derive filename from `name:` field in YAML if creating new
     let targetName = editor.name;
     if (editor.isNew) {
       const match = editor.yaml.match(/^name:\s*(\S+)/m);
       targetName = match?.[1] ?? '';
       if (!targetName) {
-        setSaveError('Das YAML muss ein "name:"-Feld enthalten.');
+        setSaveError(t.connectors.noNameError);
         setSaving(false);
         return;
       }
@@ -88,7 +89,7 @@ export function ConnectorsPage() {
       setEditor(null);
       load();
     } catch (e) {
-      setSaveError(String(e));
+      setSaveError(t.connectors.saveError(String(e)));
     } finally {
       setSaving(false);
     }
@@ -100,11 +101,10 @@ export function ConnectorsPage() {
       setConfirmDelete(null);
       load();
     } catch (e) {
-      alert('Löschen fehlgeschlagen: ' + e);
+      alert(t.connectors.deleteError(String(e)));
     }
   };
 
-  // Group by category
   const groups: Record<string, ConnectorMeta[]> = {};
   for (const c of connectors) {
     const cat = c.category || 'Other';
@@ -116,20 +116,16 @@ export function ConnectorsPage() {
     <div className="connectors-page">
       <div className="connectors-toolbar">
         <div>
-          <h2 className="connectors-title">Connectors</h2>
-          <p className="connectors-subtitle">
-            YAML-Definitionen für alle verfügbaren Monitoring-Connectors
-          </p>
+          <h2 className="connectors-title">{t.connectors.title}</h2>
+          <p className="connectors-subtitle">{t.connectors.subtitle}</p>
         </div>
-        <button className="btn-primary" onClick={openNew}>+ Neuer Connector</button>
+        <button className="btn-primary" onClick={openNew}>{t.connectors.newConnector}</button>
       </div>
 
-      {loading && <p className="status-msg">Lade Connectors…</p>}
+      {loading && <p className="status-msg">{t.connectors.loading}</p>}
 
       {!loading && connectors.length === 0 && (
-        <p className="status-msg">
-          Keine Connectors gefunden. Lege eine YAML-Datei im connectors/-Verzeichnis an.
-        </p>
+        <p className="status-msg">{t.connectors.empty}</p>
       )}
 
       {!loading && Object.entries(groups).map(([category, items]) => (
@@ -144,20 +140,15 @@ export function ConnectorsPage() {
                 </div>
                 <div className="connectors-row-meta">
                   {(c.vars ?? []).length > 0 && (
-                    <span className="connectors-row-vars">
-                      {c.vars.length} Var{c.vars.length > 1 ? 's' : ''}
-                    </span>
+                    <span className="connectors-row-vars">{t.connectors.vars(c.vars.length)}</span>
                   )}
                 </div>
                 <div className="connectors-row-actions">
                   <button className="btn-secondary" onClick={() => openEditor(c.name)}>
-                    YAML bearbeiten
+                    {t.connectors.editYaml}
                   </button>
-                  <button
-                    className="btn-danger"
-                    onClick={() => setConfirmDelete(c.name)}
-                  >
-                    Löschen
+                  <button className="btn-danger" onClick={() => setConfirmDelete(c.name)}>
+                    {t.connectors.delete}
                   </button>
                 </div>
               </div>
@@ -166,13 +157,12 @@ export function ConnectorsPage() {
         </div>
       ))}
 
-      {/* YAML Editor Modal */}
       {editor && (
         <div className="yaml-overlay" onClick={e => e.target === e.currentTarget && setEditor(null)}>
           <div className="yaml-editor">
             <div className="yaml-editor-header">
               <span className="yaml-editor-title">
-                {editor.isNew ? 'Neuer Connector' : `${editor.name}.yaml`}
+                {editor.isNew ? t.connectors.newConnectorTitle : `${editor.name}.yaml`}
               </span>
               <button className="wizard-close" onClick={() => setEditor(null)}>✕</button>
             </div>
@@ -186,24 +176,23 @@ export function ConnectorsPage() {
             />
             {saveError && <div className="yaml-editor-error">{saveError}</div>}
             <div className="yaml-editor-footer">
-              <button className="btn-secondary" onClick={() => setEditor(null)}>Abbrechen</button>
+              <button className="btn-secondary" onClick={() => setEditor(null)}>{t.connectors.cancel}</button>
               <button className="btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? 'Speichern…' : 'Speichern'}
+                {saving ? t.connectors.saving : t.connectors.save}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete confirmation */}
       {confirmDelete && (
         <div className="yaml-overlay" onClick={() => setConfirmDelete(null)}>
           <div className="confirm-dialog" onClick={e => e.stopPropagation()}>
-            <p>Connector <strong>{confirmDelete}</strong> wirklich löschen?</p>
-            <p className="confirm-hint">Diese Aktion kann nicht rückgängig gemacht werden.</p>
+            <p>{t.connectors.confirmDelete(confirmDelete)}</p>
+            <p className="confirm-hint">{t.connectors.confirmDeleteHint}</p>
             <div className="confirm-actions">
-              <button className="btn-secondary" onClick={() => setConfirmDelete(null)}>Abbrechen</button>
-              <button className="btn-danger" onClick={() => handleDelete(confirmDelete)}>Löschen</button>
+              <button className="btn-secondary" onClick={() => setConfirmDelete(null)}>{t.connectors.cancel}</button>
+              <button className="btn-danger" onClick={() => handleDelete(confirmDelete)}>{t.connectors.delete}</button>
             </div>
           </div>
         </div>

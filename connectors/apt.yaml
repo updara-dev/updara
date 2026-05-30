@@ -8,8 +8,8 @@ vars: []  # no variables needed
 
 check:
   type: shell
-  # counts upgradable lines (skips header "Listing..." line)
-  command: "apt list --upgradable 2>/dev/null | tail -n +2 | wc -l"
+  # refresh package index first so the count reflects reality, not a stale cache
+  command: "apt-get update -qq 2>/dev/null; apt list --upgradable 2>/dev/null | tail -n +2 | wc -l"
   parse:
     count: "$stdout"
   update_available: "count > 0"

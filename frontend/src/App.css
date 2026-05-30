@@ -461,6 +461,17 @@ label > small { font-size: 0.75rem; color: var(--text-muted); }
   line-height: 1.6;
 }
 
+.wizard-info-box {
+  font-size: 0.8125rem;
+  color: #93c5fd;
+  background: #0f2240;
+  border: 1px solid #1e40af44;
+  border-radius: 0.375rem;
+  padding: 0.625rem 0.875rem;
+  line-height: 1.6;
+}
+.wizard-info-box strong { color: #bfdbfe; }
+
 .wizard-footer {
   padding: 1rem 1.5rem;
   border-top: 1px solid #334155;
@@ -537,6 +548,28 @@ label > small { font-size: 0.75rem; color: var(--text-muted); }
   padding: 0 0.3rem;
   width: fit-content;
 }
+
+/* ── Language toggle ─────────────────────────────────────────── */
+.lang-toggle {
+  display: flex;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+.lang-toggle button {
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--text-muted);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.lang-toggle button:hover { color: var(--text-primary); background: #334155; }
+.lang-toggle button.active { background: #334155; color: var(--text-primary); }
 
 /* ── App navigation ──────────────────────────────────────────── */
 .app-nav {

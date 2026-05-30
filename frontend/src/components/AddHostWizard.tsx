@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchConnectors, createProvision, type ConnectorMeta } from '../api/client';
+import { useT } from '../i18n';
 
 interface Props {
   onClose: () => void;
 }
 
 const SERVICE_TEMPLATES: { keywords: string[]; label: string; connectors: string[] }[] = [
-  { keywords: ['pihole', 'pi-hole'],              label: 'Pi-hole',         connectors: ['apt', 'system'] },
+  { keywords: ['pihole', 'pi-hole'],              label: 'Pi-hole',         connectors: ['apt', 'system', 'pihole'] },
   { keywords: ['adguard', 'adguardhome'],          label: 'AdGuard Home',    connectors: ['apt', 'system'] },
   { keywords: ['proxmox', 'pve'],                  label: 'Proxmox VE',      connectors: ['apt', 'system'] },
   { keywords: ['homeassistant', 'home-assistant'], label: 'Home Assistant',  connectors: ['system'] },
@@ -31,6 +32,7 @@ function groupByCategory(connectors: ConnectorMeta[]) {
 }
 
 export function AddHostWizard({ onClose }: Props) {
+  const { t } = useT();
   const [step, setStep] = useState<1 | 2>(1);
   const [name, setName] = useState('');
   const [connectors, setConnectors] = useState<ConnectorMeta[]>([]);
@@ -45,7 +47,6 @@ export function AddHostWizard({ onClose }: Props) {
     fetchConnectors().then(setConnectors).catch(console.error);
   }, []);
 
-  // Auto-apply template when name matches a known service
   useEffect(() => {
     const tmpl = detectTemplate(name);
     if (tmpl && tmpl.label !== lastTemplate) {
@@ -125,15 +126,15 @@ export function AddHostWizard({ onClose }: Props) {
 
         {step === 1 && (
           <div className="wizard-body">
-            <h2>Add Host</h2>
+            <h2>{t.wizard.title}</h2>
 
             <label>
-              <span>Host name</span>
+              <span>{t.wizard.hostNameLabel}</span>
               <input
                 className="wizard-input"
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="e.g. pihole-prod, proxmox-1"
+                placeholder={t.wizard.hostNamePlaceholder}
                 autoFocus
               />
             </label>
@@ -141,17 +142,17 @@ export function AddHostWizard({ onClose }: Props) {
             {template && (
               <div className="wizard-template-hint">
                 <span className="wizard-template-dot" />
-                <span>Erkannt: <strong>{template.label}</strong> — empfohlene Connectors vorausgewählt</span>
+                <span>{t.wizard.detected(template.label)}</span>
               </div>
             )}
 
             <div className="wizard-connectors-header">
-              <span className="wizard-section-label">Connectors</span>
+              <span className="wizard-section-label">{t.wizard.connectorsLabel}</span>
               <input
                 className="wizard-search"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Suchen…"
+                placeholder={t.wizard.search}
               />
             </div>
 
@@ -166,7 +167,7 @@ export function AddHostWizard({ onClose }: Props) {
                         <div className="connector-card-info">
                           <strong>{c.display_name || c.name}</strong>
                           {templateConnectors.has(c.name) && (
-                            <span className="connector-recommended">Empfohlen</span>
+                            <span className="connector-recommended">{t.wizard.recommended}</span>
                           )}
                         </div>
                       </div>
@@ -196,31 +197,32 @@ export function AddHostWizard({ onClose }: Props) {
 
         {step === 2 && (
           <div className="wizard-body">
-            <h2>Auf <strong>{name}</strong> ausführen</h2>
-            <p className="wizard-sub">Diesen Befehl als root auf dem Ziel-Host kopieren und ausführen:</p>
+            <h2>{t.wizard.runOnHost(name)}</h2>
+            <p className="wizard-sub">{t.wizard.installSubtitle}</p>
             <div className="install-box">
               <code>{installCmd}</code>
               <button className="copy-btn" onClick={copy}>
-                {copied ? '✓ Kopiert' : 'Kopieren'}
+                {copied ? t.wizard.copied : t.wizard.copy}
               </button>
             </div>
-            <p className="wizard-hint">
-              Der Agent installiert sich selbst, startet automatisch und erscheint innerhalb einer Minute im Dashboard.
-            </p>
+            <p className="wizard-hint">{t.wizard.agentHint}</p>
+            <div className="wizard-info-box">
+              <strong>{t.wizard.tipTitle}</strong> {t.wizard.tipText}
+            </div>
           </div>
         )}
 
         <div className="wizard-footer">
           {step === 2 && (
-            <button className="btn-secondary" onClick={() => setStep(1)}>Zurück</button>
+            <button className="btn-secondary" onClick={() => setStep(1)}>{t.wizard.back}</button>
           )}
           {step === 1 && (
             <button className="btn-primary" onClick={handleGenerate} disabled={!name.trim()}>
-              Installationsbefehl generieren
+              {t.wizard.generate}
             </button>
           )}
           {step === 2 && (
-            <button className="btn-primary" onClick={onClose}>Fertig</button>
+            <button className="btn-primary" onClick={onClose}>{t.wizard.done}</button>
           )}
         </div>
       </div>

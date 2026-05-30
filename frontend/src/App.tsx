@@ -3,12 +3,14 @@ import { fetchHosts } from './api/client';
 import { Dashboard } from './pages/Dashboard';
 import { ConnectorsPage } from './pages/ConnectorsPage';
 import { AddHostWizard } from './components/AddHostWizard';
+import { useT } from './i18n';
 import type { HostStatus } from './types';
 import './App.css';
 
 type View = 'dashboard' | 'connectors';
 
 export default function App() {
+  const { t, lang, setLang } = useT();
   const [view, setView] = useState<View>('dashboard');
   const [hosts, setHosts] = useState<HostStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,47 +45,45 @@ export default function App() {
       <header className="app-header">
         <div className="app-header__brand">
           <h1>Updara</h1>
-          <span className="app-header__tagline">Update Radar for your entire stack.</span>
+          <span className="app-header__tagline">{t.app.tagline}</span>
         </div>
         <nav className="app-nav">
           <button
             className={`nav-tab ${view === 'dashboard' ? 'active' : ''}`}
             onClick={() => setView('dashboard')}
           >
-            Dashboard
+            {t.app.nav.dashboard}
           </button>
           <button
             className={`nav-tab ${view === 'connectors' ? 'active' : ''}`}
             onClick={() => setView('connectors')}
           >
-            Connectors
+            {t.app.nav.connectors}
           </button>
         </nav>
         <div className="app-header__actions">
           {view === 'dashboard' && (
             <>
               {updateCount > 0 && (
-                <span className="badge badge--warning">
-                  {updateCount} Update{updateCount > 1 ? 's' : ''}
-                </span>
+                <span className="badge badge--warning">{t.app.updates(updateCount)}</span>
               )}
-              <span className="app-header__hosts">
-                {hosts.length} Host{hosts.length !== 1 ? 's' : ''}
-              </span>
+              <span className="app-header__hosts">{t.app.hosts(hosts.length)}</span>
               <button className="btn-secondary" onClick={load} disabled={loading}>
-                {loading ? 'Aktualisiere…' : 'Aktualisieren'}
+                {loading ? t.app.refreshing : t.app.refresh}
               </button>
               <button className="btn-primary" onClick={() => setShowWizard(true)}>
-                + Host hinzufügen
+                {t.app.addHost}
               </button>
             </>
           )}
+          <div className="lang-toggle">
+            <button className={lang === 'en' ? 'active' : ''} onClick={() => setLang('en')}>EN</button>
+            <button className={lang === 'de' ? 'active' : ''} onClick={() => setLang('de')}>DE</button>
+          </div>
         </div>
       </header>
       <main>
-        {view === 'dashboard' && (
-          <Dashboard hosts={hosts} loading={loading} error={error} />
-        )}
+        {view === 'dashboard' && <Dashboard hosts={hosts} loading={loading} error={error} />}
         {view === 'connectors' && <ConnectorsPage />}
       </main>
       {showWizard && (

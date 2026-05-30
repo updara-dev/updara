@@ -1,5 +1,6 @@
 import type { HostStatus } from '../types';
 import { CheckRow } from './CheckRow';
+import { useT } from '../i18n';
 
 interface Props {
   status: HostStatus;
@@ -13,6 +14,7 @@ function cardColor(status: HostStatus): string {
 }
 
 export function HostCard({ status }: Props) {
+  const { t } = useT();
   const { host, results } = status;
   const color = cardColor(status);
   const lastSeen = new Date(host.last_seen).toLocaleString();
@@ -44,7 +46,7 @@ export function HostCard({ status }: Props) {
       ))}
 
       {(results ?? []).length === 0 && (
-        <p className="host-card__empty">No checks reported yet.</p>
+        <p className="host-card__empty">{t.dashboard.noChecks}</p>
       )}
     </div>
   );

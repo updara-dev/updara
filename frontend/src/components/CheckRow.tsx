@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react';
 import type { CheckResult, Command } from '../types';
 import { triggerUpdate, fetchCommands } from '../api/client';
+import { useT } from '../i18n';
 
 interface Props {
   result: CheckResult;
   hostname: string;
 }
 
-// Strip ANSI terminal escape codes before display
 function stripAnsi(str: string): string {
   return str.replace(/\x1b\[[0-9;?]*[a-zA-Z]|\r/g, '').trim();
 }
 
 export function CheckRow({ result, hostname }: Props) {
+  const { t } = useT();
   const [cmd, setCmd] = useState<Command | null>(null);
   const [showOutput, setShowOutput] = useState(false);
 
@@ -36,7 +37,7 @@ export function CheckRow({ result, hostname }: Props) {
       const created = await triggerUpdate(hostname, result.connector);
       setCmd(created);
     } catch (e) {
-      alert('Failed to trigger update: ' + e);
+      alert(t.checkRow.updateError(String(e)));
     }
   };
 
@@ -49,18 +50,18 @@ export function CheckRow({ result, hostname }: Props) {
 
   const statusBadge = () => {
     if (!cmd) return null;
-    if (cmd.status === 'pending') return <span className="cmd-status pending">Pending…</span>;
-    if (cmd.status === 'running') return <span className="cmd-status running">Running…</span>;
+    if (cmd.status === 'pending') return <span className="cmd-status pending">{t.checkRow.pending}</span>;
+    if (cmd.status === 'running') return <span className="cmd-status running">{t.checkRow.running}</span>;
     if (cmd.status === 'done')
       return (
         <button className="cmd-status done toggle-output" onClick={() => setShowOutput(v => !v)}>
-          ✅ Updated {showOutput ? '▲' : '▼'}
+          {t.checkRow.updated} {showOutput ? '▲' : '▼'}
         </button>
       );
     if (cmd.status === 'failed')
       return (
         <button className="cmd-status failed toggle-output" onClick={() => setShowOutput(v => !v)}>
-          ❌ Failed {showOutput ? '▲' : '▼'}
+          {t.checkRow.failed} {showOutput ? '▲' : '▼'}
         </button>
       );
   };
@@ -81,12 +82,12 @@ export function CheckRow({ result, hostname }: Props) {
         <div className="check-row__actions">
           {statusBadge()}
           {result.update_available && !cmd && (
-            <button className="update-btn" onClick={handleUpdate}>Update</button>
+            <button className="update-btn" onClick={handleUpdate}>{t.checkRow.update}</button>
           )}
           {result.update_available && result.changelog && !cmd && (
             <a className="check-row__changelog" href={result.changelog}
                target="_blank" rel="noopener noreferrer">
-              Changelog ↗
+              {t.checkRow.changelog}
             </a>
           )}
         </div>
