@@ -81,15 +81,12 @@ func main() {
 	}
 
 	// Sync connector YAMLs from server on startup (after 10s) and every hour.
-	// Also discovers new connectors added to the server after provisioning.
-	// If anything changed, exit 0 so systemd restarts with fresh connectors.
+	// If any changed, exit 0 so systemd restarts with fresh connectors.
 	go func() {
 		time.Sleep(10 * time.Second)
 		for {
-			changed := syncConnectors(serverURL, connDir, connectors)
-			changed += discoverConnectors(serverURL, connDir)
-			if changed > 0 {
-				log.Printf("connector sync: %d connector(s) updated/added — restarting", changed)
+			if changed := syncConnectors(serverURL, connDir, connectors); changed > 0 {
+				log.Printf("connector sync: %d connector(s) updated — restarting", changed)
 				os.Exit(0)
 			}
 			time.Sleep(time.Duration(syncInterval) * time.Second)
