@@ -17,5 +17,5 @@ check:
 
 update:
   type: shell
-  command: "DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y"
+  command: "DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y && apt-get autoremove -y"
   requires_confirmation: true

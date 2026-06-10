@@ -1,0 +1,64 @@
+name: nginx
+display_name: Nginx
+category: infrastructure
+docs: https://nginx.org/en/CHANGES
+
+vars: []
+
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, re, sys
+    from urllib.request import urlopen, Request
+
+    # Current installed version
+    try:
+        r = subprocess.run(['nginx', '-v'], capture_output=True, text=True)
+        m = re.search(r'nginx/(\S+)', r.stderr + r.stdout)
+        if not m:
+            print("error=nginx not found")
+            sys.exit(0)
+        current = m.group(1)
+    except FileNotFoundError:
+        print("error=nginx not installed")
+        sys.exit(0)
+
+    # Latest stable from nginx.org (stable = even minor version number)
+    try:
+        req = Request(
+            'https://nginx.org/en/download.html',
+            headers={'User-Agent': 'updara-agent/1.0'}
+        )
+        html = urlopen(req, timeout=10).read().decode()
+        versions = re.findall(r'nginx-(\d+)\.(\d+)\.(\d+)\.tar\.gz', html)
+        stable = [(int(a), int(b), int(c)) for a, b, c in versions if int(b) % 2 == 0]
+        if not stable:
+            print(f"current={current}")
+            print("error=could not parse nginx.org")
+            sys.exit(0)
+        t = max(stable)
+        latest = f"{t[0]}.{t[1]}.{t[2]}"
+    except Exception as e:
+        print(f"current={current}")
+        print(f"error=nginx.org: {e}")
+        sys.exit(0)
+
+    print(f"current={current}")
+    print(f"latest={latest}")
+    PYEOF
+  parse:
+    current: "$current"
+    latest:  "$latest"
+  update_available: "current != latest"
+  interval: 86400
+
+update:
+  requires_confirmation: true
+  type: shell
+  command: |
+    apt-get update -qq && apt-get install -y nginx 2>&1
+    nginx -v 2>&1
+
+notifications:
+  changelog: "https://nginx.org/en/CHANGES"

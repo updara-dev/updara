@@ -1,0 +1,72 @@
+name: trilium
+display_name: Trilium Notes
+category: application
+docs: https://github.com/TriliumNext/Notes/releases
+
+vars: []
+
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import json, sys
+    from urllib.request import urlopen, Request
+
+    # Current version from version file written by update script
+    try:
+        with open('/opt/trilium/TRILIUMNEXT_VERSION') as f:
+            current = f.read().strip()
+        if not current:
+            print("error=version file empty at /opt/trilium/TRILIUMNEXT_VERSION")
+            sys.exit(0)
+    except FileNotFoundError:
+        print("error=Trilium not found at /opt/trilium")
+        sys.exit(0)
+
+    # Latest from GitHub (TriliumNext/Notes)
+    try:
+        req = Request(
+            'https://api.github.com/repos/TriliumNext/Notes/releases/latest',
+            headers={'User-Agent': 'updara-agent/1.0'}
+        )
+        data = json.loads(urlopen(req, timeout=10).read())
+        latest = data['tag_name'].lstrip('v')
+    except Exception as e:
+        print(f"current={current}")
+        print(f"error=GitHub API: {e}")
+        sys.exit(0)
+
+    print(f"current={current}")
+    print(f"latest={latest}")
+    PYEOF
+  parse:
+    current: "$current"
+    latest:  "$latest"
+  update_available: "current != latest"
+  interval: 86400
+
+update:
+  requires_confirmation: true
+  type: shell
+  command: |
+    set -e
+    LATEST=$(python3 -c "
+    import json
+    from urllib.request import urlopen, Request
+    req = Request('https://api.github.com/repos/TriliumNext/Notes/releases/latest', headers={'User-Agent': 'updara-agent/1.0'})
+    print(json.loads(urlopen(req, timeout=10).read())['tag_name'].lstrip('v'))
+    ")
+    echo "Updating Trilium to v${LATEST}..."
+    cd /tmp
+    wget -q "https://github.com/TriliumNext/Notes/releases/download/v${LATEST}/TriliumNextNotes-Server-v${LATEST}-linux-x64.tar.xz" -O trilium-next.tar.xz
+    tar xf trilium-next.tar.xz
+    EXTRACTED=$(find /tmp -maxdepth 1 -name 'TriliumNextNotes-Server-*-linux-x64' -type d | head -1)
+    systemctl stop trilium
+    rsync -a --delete "${EXTRACTED}/" /opt/trilium/
+    echo "${LATEST}" > /opt/trilium/TRILIUMNEXT_VERSION
+    systemctl start trilium
+    rm -rf "${EXTRACTED}" /tmp/trilium-next.tar.xz
+    echo "Trilium updated to v${LATEST}"
+
+notifications:
+  changelog: "https://github.com/TriliumNext/Notes/releases"

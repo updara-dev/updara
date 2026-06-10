@@ -106,14 +106,19 @@ update:
       echo "Install: apt install ubuntu-release-upgrader-core"
       exit 1
     fi
+    # On non-LTS releases (odd minor version, e.g. 25.10), force upgrade directly to next LTS
+    MINOR=$(echo "$VERSION" | cut -d. -f2)
+    if [ $((MINOR % 2)) -ne 0 ]; then
+      echo "Non-LTS release detected — setting Prompt=lts for direct LTS upgrade..."
+      sed -i 's/^Prompt=.*/Prompt=lts/' /etc/update-manager/release-upgrades 2>/dev/null || true
+    fi
     echo "Checking available upgrade path..."
     RESULT=$(do-release-upgrade -c 2>&1)
     echo "$RESULT"
-    if echo "$RESULT" | grep -q "not supported"; then
+    if ! echo "$RESULT" | grep -q "New release"; then
       echo ""
       echo "MANUAL ACTION REQUIRED:"
-      echo "Direct upgrade is not possible for this release."
-      echo "This OS is End-of-Life and requires a fresh install."
+      echo "No upgrade path found for this release."
       # Dynamically fetch the current latest supported LTS
       LATEST=$(python3 -c "import json,datetime;from urllib.request import urlopen;d=json.loads(urlopen('https://endoflife.date/api/ubuntu.json',timeout=5).read());t=datetime.date.today();l=sorted([v for v in d if v.get('lts') and v.get('eol') and datetime.date.fromisoformat(str(v['eol']))>t],key=lambda v:v.get('releaseDate',''),reverse=True);print(l[0]['latest']+' ('+l[0].get('codename','')+')' if l else 'latest LTS')" 2>/dev/null)
       echo "Recommended: Fresh install of Ubuntu $LATEST"
@@ -121,6 +126,8 @@ update:
       exit 1
     fi
     echo ""
+    export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    ln -sf /usr/bin/gpg /usr/local/bin/gpg 2>/dev/null || true
     echo "Starting upgrade (this may take 20-40 minutes)..."
     DEBIAN_FRONTEND=noninteractive do-release-upgrade -f DistUpgradeViewNonInteractive
   requires_confirmation: true

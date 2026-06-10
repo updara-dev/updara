@@ -152,7 +152,7 @@ update:
     } | xargs -I{} dirname {} | sort -u \
       | while read dir; do
           echo "[Updara] Updating stack in $dir"
-          cd "$dir" && $COMPOSE_CMD pull && $COMPOSE_CMD up -d
+          cd "$dir" && $COMPOSE_CMD pull && $COMPOSE_CMD up -d --remove-orphans
         done
   requires_confirmation: true
 
