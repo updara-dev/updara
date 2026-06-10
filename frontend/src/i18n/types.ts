@@ -1,7 +1,7 @@
 export interface Translations {
   app: {
     tagline: string;
-    nav: { dashboard: string; connectors: string };
+    nav: { dashboard: string; connectors: string; settings: string };
     updates: (n: number) => string;
     hosts: (n: number) => string;
     refresh: string;
@@ -18,6 +18,9 @@ export interface Translations {
     deselectAll: string;
     bulkUpdate: (n: number) => string;
     bulkTriggered: (n: number) => string;
+    selfHostTitle: string;
+    selfHostHint: string;
+    selfHostBtn: string;
   };
   checkRow: {
     pending: string;
@@ -73,6 +76,39 @@ export interface Translations {
     noVars: string;
     rescan: string;
     rescanQueued: string;
+    syncAgent: string;
+    syncAgentQueued: string;
+    addConnector: string;
+    addConnectorBtn: string;
+    addConnectorQueued: string;
+    addConnectorDone: string;
+    addConnectorError: (e: string) => string;
+    noMoreConnectors: string;
+  };
+  settings: {
+    title: string;
+    ntfySection: string;
+    ntfyUrl: string;
+    ntfyTopic: string;
+    telegramSection: string;
+    telegramToken: string;
+    telegramChatId: string;
+    enabled: string;
+    save: string;
+    saving: string;
+    saved: string;
+    saveError: (e: string) => string;
+    testBtn: string;
+    testing: string;
+    testOk: string;
+    testError: (e: string) => string;
+    ntfyHint: string;
+    telegramHint: string;
+    notificationsSection: string;
+    cooldownDays: string;
+    cooldownDaysHint: string;
+    minCount: string;
+    minCountHint: string;
   };
   connectors: {
     title: string;

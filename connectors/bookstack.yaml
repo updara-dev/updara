@@ -1,0 +1,60 @@
+name: bookstack
+display_name: BookStack
+category: application
+docs: https://codeberg.org/bookstack/bookstack/releases
+
+vars: []
+
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, json, sys
+    from urllib.request import urlopen, Request
+
+    install_dir = '/var/www/bookstack'
+
+    # Current version
+    try:
+        with open(f'{install_dir}/version') as f:
+            current = f.read().strip()
+    except FileNotFoundError:
+        print("error=BookStack not found at /var/www/bookstack")
+        sys.exit(0)
+
+    # Latest from Codeberg
+    try:
+        req = Request(
+            'https://codeberg.org/api/v1/repos/bookstack/bookstack/releases?limit=1',
+            headers={'User-Agent': 'updara-agent/1.0'}
+        )
+        data = json.loads(urlopen(req, timeout=10).read())
+        latest = data[0]['tag_name']
+    except Exception as e:
+        print(f"current={current}")
+        print(f"error=Codeberg API: {e}")
+        sys.exit(0)
+
+    print(f"current={current}")
+    print(f"latest={latest}")
+    PYEOF
+  parse:
+    current: "$current"
+    latest:  "$latest"
+  update_available: "current != latest"
+  interval: 3600
+
+update:
+  requires_confirmation: true
+  type: shell
+  command: |
+    cd /var/www/bookstack
+    git pull origin release
+    composer install --no-dev -o 2>&1
+    php artisan migrate --force 2>&1
+    php artisan view:clear 2>&1
+    php artisan cache:clear 2>&1
+    echo "BookStack updated to $(cat version)"
+
+notifications:
+  changelog: "https://codeberg.org/bookstack/bookstack/releases"

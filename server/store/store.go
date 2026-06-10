@@ -82,6 +82,18 @@ CREATE TABLE IF NOT EXISTS deleted_hosts (
     deleted_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS notified_updates (
+    host_id     TEXT NOT NULL,
+    connector   TEXT NOT NULL,
+    notified_at TEXT NOT NULL,
+    PRIMARY KEY (host_id, connector)
+);
+
 CREATE INDEX IF NOT EXISTS idx_results_host    ON results(host_id);
 CREATE INDEX IF NOT EXISTS idx_commands_host   ON commands(host_id);
 CREATE INDEX IF NOT EXISTS idx_commands_status ON commands(status);
@@ -535,4 +547,125 @@ func (s *Store) GetCommand(id string) (*model.Command, bool) {
 	c.CreatedAt, _ = time.Parse(time.RFC3339Nano, ca)
 	c.UpdatedAt, _ = time.Parse(time.RFC3339Nano, ua)
 	return &c, true
+}
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+
+func (s *Store) GetSetting(key string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var v string
+	s.db.QueryRow(`SELECT value FROM settings WHERE key=?`, key).Scan(&v)
+	return v
+}
+
+func (s *Store) SetSetting(key, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.db.Exec(`INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
+}
+
+func (s *Store) AllSettings() map[string]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows, err := s.db.Query(`SELECT key,value FROM settings`)
+	if err != nil {
+		return map[string]string{}
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var k, v string
+		rows.Scan(&k, &v)
+		out[k] = v
+	}
+	return out
+}
+
+// ── Notification dedup ────────────────────────────────────────────────────────
+
+type UpdateEntry struct {
+	Connector, DisplayName, ValuesJSON string
+}
+
+// NewUpdates returns connectors that are update_available=true for hostname
+// and either never notified, or last notified more than cooldownDays ago.
+func (s *Store) NewUpdates(hostname string, cooldownDays int) []UpdateEntry {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	q := `
+		SELECT r.connector, r.display_name, COALESCE(r.values_json,'{}')
+		FROM results r
+		WHERE r.host_id=? AND r.update_available=1
+		  AND (
+		    NOT EXISTS (
+		        SELECT 1 FROM notified_updates n
+		        WHERE n.host_id=r.host_id AND n.connector=r.connector
+		    )
+		    OR EXISTS (
+		        SELECT 1 FROM notified_updates n
+		        WHERE n.host_id=r.host_id AND n.connector=r.connector
+		          AND datetime(n.notified_at) < datetime('now', '-` + strconv.Itoa(cooldownDays) + ` days')
+		    )
+		  )
+	`
+	rows, err := s.db.Query(q, hostname)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []UpdateEntry
+	for rows.Next() {
+		var e UpdateEntry
+		rows.Scan(&e.Connector, &e.DisplayName, &e.ValuesJSON)
+		out = append(out, e)
+	}
+	return out
+}
+
+// ParseCount extracts the "count" field from a values_json string, returns -1 if absent.
+func ParseCount(valuesJSON string) int {
+	var m map[string]string
+	if json.Unmarshal([]byte(valuesJSON), &m) == nil {
+		if s, ok := m["count"]; ok {
+			if n, err := strconv.Atoi(s); err == nil {
+				return n
+			}
+		}
+	}
+	return -1
+}
+
+// MarkNotified records that we notified about these connectors for hostname.
+func (s *Store) MarkNotified(hostname string, entries []UpdateEntry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	for _, e := range entries {
+		s.db.Exec(`INSERT OR REPLACE INTO notified_updates(host_id,connector,notified_at) VALUES(?,?,?)`,
+			hostname, e.Connector, now)
+	}
+}
+
+// ClearResolved removes notified_updates entries where update is no longer available,
+// so the next update cycle triggers a fresh notification.
+func (s *Store) ClearResolved(hostname string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.db.Exec(`
+		DELETE FROM notified_updates
+		WHERE host_id=?
+		  AND NOT EXISTS (
+		      SELECT 1 FROM results r
+		      WHERE r.host_id=notified_updates.host_id
+		        AND r.connector=notified_updates.connector
+		        AND r.update_available=1
+		  )
+		  AND EXISTS (
+		      SELECT 1 FROM results r
+		      WHERE r.host_id=notified_updates.host_id
+		        AND r.connector=notified_updates.connector
+		        AND (r.error IS NULL OR r.error='')
+		  )
+	`, hostname)
 }

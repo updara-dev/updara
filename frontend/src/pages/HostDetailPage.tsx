@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { fetchHostDetail, ignoreConnector, unignoreConnector, triggerUpdate, fetchCommands, removeHostConnector, deleteHost, fetchHostProvision, updateProvision, recheckConnector, fetchConnectors } from '../api/client';
+import { fetchHostDetail, ignoreConnector, unignoreConnector, triggerUpdate, fetchCommands, removeHostConnector, deleteHost, fetchHostProvision, updateProvision, recheckConnector, fetchConnectors, syncAgent, installConnector } from '../api/client';
 import type { ConnectorMeta } from '../api/client';
 import { useT } from '../i18n';
 import type { HostDetail, CheckResult, Command, Provision } from '../types';
@@ -326,6 +326,74 @@ function ResultRow({
   );
 }
 
+function AddConnectorPanel({
+  hostname,
+  available,
+  onDone,
+}: {
+  hostname: string;
+  available: ConnectorMeta[];
+  onDone: () => void;
+}) {
+  const { t } = useT();
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState('');
+  const [status, setStatus] = useState<'idle' | 'queued' | 'done' | 'error'>('idle');
+  const [errMsg, setErrMsg] = useState('');
+
+  const handleInstall = async () => {
+    if (!selected) return;
+    setStatus('queued');
+    try {
+      await installConnector(hostname, selected);
+      setStatus('done');
+      setTimeout(() => { setStatus('idle'); setSelected(''); setOpen(false); onDone(); }, 3000);
+    } catch (e) {
+      setErrMsg(String(e));
+      setStatus('error');
+    }
+  };
+
+  if (!open) {
+    return (
+      <button className="add-connector-btn" onClick={() => setOpen(true)}>
+        {t.hostDetail.addConnector}
+      </button>
+    );
+  }
+
+  return (
+    <div className="add-connector-panel">
+      {available.length === 0 ? (
+        <span className="add-connector-panel__empty">{t.hostDetail.noMoreConnectors}</span>
+      ) : (
+        <>
+          <select
+            className="add-connector-panel__select"
+            value={selected}
+            onChange={e => setSelected(e.target.value)}
+          >
+            <option value="">— Connector wählen —</option>
+            {available.map(c => (
+              <option key={c.name} value={c.name}>{c.display_name || c.name}</option>
+            ))}
+          </select>
+          <button
+            className="btn-primary"
+            onClick={handleInstall}
+            disabled={!selected || status === 'queued'}
+          >
+            {status === 'queued' ? t.hostDetail.addConnectorQueued : t.hostDetail.addConnectorBtn}
+          </button>
+        </>
+      )}
+      {status === 'done' && <span className="add-connector-panel__status ok">{t.hostDetail.addConnectorDone}</span>}
+      {status === 'error' && <span className="add-connector-panel__status err">{t.hostDetail.addConnectorError(errMsg)}</span>}
+      <button className="add-connector-panel__cancel" onClick={() => { setOpen(false); setStatus('idle'); }}>✕</button>
+    </div>
+  );
+}
+
 function CommandItem({ cmd }: { cmd: Command }) {
   const [open, setOpen] = useState(false);
 
@@ -363,6 +431,7 @@ export function HostDetailPage({ hostname, onBack }: Props) {
   const [provision, setProvision] = useState<Provision | null>(null);
   const [connectorMeta, setConnectorMeta] = useState<ConnectorMeta[]>([]);
   const [showVarsDialog, setShowVarsDialog] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -394,6 +463,12 @@ export function HostDetailPage({ hostname, onBack }: Props) {
   const handleRemove = async (connector: string) => {
     await removeHostConnector(hostname, connector);
     await load();
+  };
+
+  const handleSync = async () => {
+    setSyncing(true);
+    await syncAgent(hostname).catch(console.error);
+    setTimeout(() => { setSyncing(false); load(); }, 15_000);
   };
 
   const handleDeleteHost = async () => {
@@ -445,6 +520,9 @@ export function HostDetailPage({ hostname, onBack }: Props) {
           {t.hostDetail.back}
         </button>
         <div className="host-detail__topbar-actions">
+          <button className="sync-agent-btn" onClick={handleSync} disabled={syncing}>
+            {syncing ? t.hostDetail.syncAgentQueued : t.hostDetail.syncAgent}
+          </button>
           {provision && (
             <button className="edit-vars-btn" onClick={() => setShowVarsDialog(true)}>
               {t.hostDetail.editVars}
@@ -485,6 +563,14 @@ export function HostDetailPage({ hostname, onBack }: Props) {
             ))}
           </div>
         ))}
+      </div>
+
+      <div className="host-detail__add-connector">
+        <AddConnectorPanel
+          hostname={hostname}
+          available={connectorMeta.filter(c => !results.some(r => r.connector === c.name))}
+          onDone={load}
+        />
       </div>
 
       <div className="command-history">

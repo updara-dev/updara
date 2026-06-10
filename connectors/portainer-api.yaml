@@ -31,7 +31,6 @@ check:
     base_url = os.environ.get('PORTAINER_URL', 'http://localhost:9000').rstrip('/')
     token    = os.environ.get('PORTAINER_TOKEN', '')
 
-    # Allow self-signed certs (Portainer default)
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
@@ -46,49 +45,50 @@ check:
                       headers={'X-API-Key': token, 'Content-Type': 'application/json'})
         try:
             return json.loads(urlopen(req, timeout=15, context=ctx).read())
-        except HTTPError as e:
-            return None
         except Exception:
             return None
 
-    # Get all stacks
     stacks = api('/api/stacks')
     if stacks is None:
         print("count=0")
         print("error=Cannot reach Portainer API")
         sys.exit(0)
 
-    outdated = []
+    outdated_stacks = []
     for stack in stacks:
-        stack_id   = stack.get('Id')
-        stack_name = stack.get('Name', str(stack_id))
+        stack_name = stack.get('Name', '')
 
-        # Get services/images from stack
-        services = api(f'/api/stacks/{stack_id}/file')
-        if not services:
-            continue
+        # Get running containers for this stack via their compose project label
+        result = subprocess.run(
+            ['docker', 'ps', '--format', '{{.Names}}\t{{.Image}}',
+             '--filter', f'label=com.docker.compose.project={stack_name}'],
+            capture_output=True, text=True
+        )
 
-        # Extract image names from compose content
-        compose_content = services.get('StackFileContent', '')
-        import re
-        images = re.findall(r'^\s+image:\s+(\S+)', compose_content, re.MULTILINE)
-
-        for image in images:
-            if '.' in image.split('/')[0]:   # skip non-Docker-Hub
+        for line in result.stdout.strip().split('\n'):
+            if '\t' not in line:
                 continue
+            _, image = line.split('\t', 1)
+
+            # Skip non-Docker-Hub images (ghcr.io, quay.io, custom registries)
+            if '.' in image.split('/')[0]:
+                continue
+
             repo, tag = (image.rsplit(':', 1) if ':' in image.split('/')[-1] else (image, 'latest'))
             if '/' not in repo:
                 repo = 'library/' + repo
+
             try:
-                token_url = f'https://auth.docker.io/token?service=registry.docker.io&scope=repository:{repo}:pull'
-                hub_token = json.loads(urlopen(token_url, timeout=10).read())['token']
+                hub_token = json.loads(urlopen(
+                    f'https://auth.docker.io/token?service=registry.docker.io&scope=repository:{repo}:pull',
+                    timeout=10
+                ).read())['token']
                 req2 = Request(
                     f'https://registry-1.docker.io/v2/{repo}/manifests/{tag}',
                     headers={'Authorization': f'Bearer {hub_token}',
                              'Accept': 'application/vnd.docker.distribution.manifest.v2+json'}
                 )
-                resp = urlopen(req2, timeout=10)
-                remote_digest = resp.headers.get('Docker-Content-Digest', '')
+                remote_digest = urlopen(req2, timeout=10).headers.get('Docker-Content-Digest', '')
 
                 local = subprocess.run(
                     ['docker', 'inspect', '--format', '{{index .RepoDigests 0}}', image],
@@ -96,15 +96,15 @@ check:
                 ).stdout.strip()
 
                 if remote_digest and local and remote_digest not in local:
-                    if stack_name not in outdated:
-                        outdated.append(stack_name)
+                    if stack_name not in outdated_stacks:
+                        outdated_stacks.append(stack_name)
                     break
             except Exception:
                 pass
 
-    print(f'count={len(outdated)}')
-    if outdated:
-        print(f'outdated={",".join(outdated)}')
+    print(f'count={len(outdated_stacks)}')
+    if outdated_stacks:
+        print(f'outdated={",".join(outdated_stacks)}')
     print(f'stacks={len(stacks)}')
     PYEOF
   parse:
@@ -116,20 +116,17 @@ check:
 
 update:
   type: shell
-  # Redeploys all outdated stacks via Portainer API (keeps Portainer in sync).
+  # Redeploys all stacks via Portainer API (pull latest images + recreate containers).
   command: |
     python3 - <<'PYEOF'
     import json, os, sys, ssl
     try:
         from urllib.request import urlopen, Request
-        from urllib.error import HTTPError
-        import urllib.parse
     except ImportError:
         sys.exit(1)
 
     base_url = os.environ.get('PORTAINER_URL', 'http://localhost:9000').rstrip('/')
     token    = os.environ.get('PORTAINER_TOKEN', '')
-    outdated = os.environ.get('outdated', '').split(',')
 
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
@@ -147,20 +144,20 @@ update:
             print(f'API error {path}: {e}')
             return None
 
-    stacks = api('/api/stacks') or []
+    stacks    = api('/api/stacks') or []
     endpoints = api('/api/endpoints') or []
     endpoint_id = endpoints[0]['Id'] if endpoints else 1
 
     for stack in stacks:
-        name = stack.get('Name', '')
-        if name not in outdated:
-            continue
+        name     = stack.get('Name', '')
         stack_id = stack['Id']
+        file_content = (api(f'/api/stacks/{stack_id}/file') or {}).get('StackFileContent', '')
         print(f'[Portainer] Redeploying stack: {name}')
-        result = api(f'/api/stacks/{stack_id}?endpointId={endpoint_id}',
-                     method='PUT',
-                     data={'pullImage': True, 'prune': False,
-                           'stackFileContent': (api(f'/api/stacks/{stack_id}/file') or {}).get('StackFileContent', '')})
+        result = api(
+            f'/api/stacks/{stack_id}?endpointId={endpoint_id}',
+            method='PUT',
+            data={'pullImage': True, 'prune': False, 'stackFileContent': file_content}
+        )
         if result is not None:
             print(f'[Portainer] {name}: redeployed')
         else:

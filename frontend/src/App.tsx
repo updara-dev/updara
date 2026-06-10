@@ -2,13 +2,14 @@ import { useEffect, useState, useCallback } from 'react';
 import { fetchHosts } from './api/client';
 import { Dashboard } from './pages/Dashboard';
 import { ConnectorsPage } from './pages/ConnectorsPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { HostDetailPage } from './pages/HostDetailPage';
 import { AddHostWizard } from './components/AddHostWizard';
 import { useT } from './i18n';
 import type { HostStatus } from './types';
 import './App.css';
 
-type View = 'dashboard' | 'connectors';
+type View = 'dashboard' | 'connectors' | 'settings';
 
 export default function App() {
   const { t, lang, setLang } = useT();
@@ -17,7 +18,7 @@ export default function App() {
   const [hosts, setHosts] = useState<HostStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showWizard, setShowWizard] = useState(false);
+  const [wizardInitialName, setWizardInitialName] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -65,6 +66,12 @@ export default function App() {
           >
             {t.app.nav.connectors}
           </button>
+          <button
+            className={`nav-tab ${view === 'settings' ? 'active' : ''}`}
+            onClick={() => setView('settings')}
+          >
+            {t.app.nav.settings}
+          </button>
         </nav>
         <div className="app-header__actions">
           {view === 'dashboard' && (
@@ -76,7 +83,7 @@ export default function App() {
               <button className="btn-secondary" onClick={load} disabled={loading}>
                 {loading ? t.app.refreshing : t.app.refresh}
               </button>
-              <button className="btn-primary" onClick={() => setShowWizard(true)}>
+              <button className="btn-primary" onClick={() => setWizardInitialName('')}>
                 {t.app.addHost}
               </button>
             </>
@@ -89,15 +96,25 @@ export default function App() {
       </header>
       <main>
         {view === 'dashboard' && !selectedHostname && (
-          <Dashboard hosts={hosts} loading={loading} error={error} onSelectHost={setSelectedHostname} />
+          <Dashboard
+            hosts={hosts}
+            loading={loading}
+            error={error}
+            onSelectHost={setSelectedHostname}
+            onAddHost={(name) => setWizardInitialName(name ?? '')}
+          />
         )}
         {view === 'dashboard' && selectedHostname && (
           <HostDetailPage hostname={selectedHostname} onBack={() => { setSelectedHostname(null); load(); }} />
         )}
         {view === 'connectors' && <ConnectorsPage />}
+        {view === 'settings' && <SettingsPage />}
       </main>
-      {showWizard && (
-        <AddHostWizard onClose={() => { setShowWizard(false); load(); }} />
+      {wizardInitialName !== null && (
+        <AddHostWizard
+          initialName={wizardInitialName}
+          onClose={() => { setWizardInitialName(null); load(); }}
+        />
       )}
     </div>
   );

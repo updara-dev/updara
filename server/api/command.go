@@ -78,6 +78,54 @@ func (h *Handler) hostCommands(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(cmds)
 }
 
+// POST /api/v1/hosts/{hostname}/sync
+func (h *Handler) syncAgent(w http.ResponseWriter, r *http.Request) {
+	hostname := r.PathValue("hostname")
+
+	b := make([]byte, 8)
+	rand.Read(b)
+	c := model.Command{
+		ID:        hex.EncodeToString(b),
+		HostID:    hostname,
+		Connector: "__sync__",
+		Cmd:       "nohup sh -c 'sleep 2 && systemctl restart updara-agent' >/dev/null 2>&1 &",
+		Status:    model.CmdStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	h.store.AddCommand(c)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(c)
+}
+
+// POST /api/v1/hosts/{hostname}/connectors/{connector}/install
+func (h *Handler) installConnector(w http.ResponseWriter, r *http.Request) {
+	hostname := r.PathValue("hostname")
+	connector := r.PathValue("connector")
+
+	cmd := "mkdir -p /etc/updara/connectors && curl -sf " +
+		h.publicURL + "/api/v1/connectors/" + connector + "/yaml" +
+		" -o /etc/updara/connectors/" + connector + ".yaml" +
+		" && nohup sh -c 'sleep 2 && systemctl restart updara-agent' >/dev/null 2>&1 &"
+
+	b := make([]byte, 8)
+	rand.Read(b)
+	c := model.Command{
+		ID:        hex.EncodeToString(b),
+		HostID:    hostname,
+		Connector: "__install__" + connector,
+		Cmd:       cmd,
+		Status:    model.CmdStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	h.store.AddCommand(c)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(c)
+}
+
 func (h *Handler) connectorUpdateCmd(name string) string {
 	data, err := os.ReadFile(filepath.Join(h.connectorsDir, name+".yaml"))
 	if err != nil {

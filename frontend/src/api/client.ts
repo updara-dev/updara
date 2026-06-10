@@ -107,3 +107,37 @@ export const recheckConnector = (hostname: string, connector: string) =>
   request<void>(`/api/v1/hosts/${encodeURIComponent(hostname)}/recheck/${encodeURIComponent(connector)}`, {
     method: 'POST',
   });
+
+export const syncAgent = (hostname: string) =>
+  request<Command>(`/api/v1/hosts/${encodeURIComponent(hostname)}/sync`, {
+    method: 'POST',
+  });
+
+export const installConnector = (hostname: string, connector: string) =>
+  request<Command>(`/api/v1/hosts/${encodeURIComponent(hostname)}/connectors/${encodeURIComponent(connector)}/install`, {
+    method: 'POST',
+  });
+
+export interface NotificationSettings {
+  ntfy_url: string;
+  ntfy_topic: string;
+  ntfy_enabled: boolean;
+  telegram_token: string;
+  telegram_chat_id: string;
+  telegram_enabled: boolean;
+  cooldown_days: number;
+  min_count: number;
+}
+
+export const fetchNotificationSettings = () =>
+  request<NotificationSettings>('/api/v1/settings/notifications');
+
+export const saveNotificationSettings = (s: NotificationSettings) =>
+  request<void>('/api/v1/settings/notifications', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(s),
+  });
+
+export const testNotification = () =>
+  request<void>('/api/v1/settings/notifications/test', { method: 'POST' });

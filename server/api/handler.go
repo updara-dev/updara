@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/updara/server/model"
+	"github.com/updara/server/notify"
 	"github.com/updara/server/store"
 )
 
@@ -42,6 +43,12 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/hosts/{hostname}/commands", h.hostCommands)
 	mux.HandleFunc("POST /api/v1/commands/{id}/result", h.commandResult)
 
+	// Agent sync (restart via nohup — agent picks up new connector YAMLs)
+	mux.HandleFunc("POST /api/v1/hosts/{hostname}/sync", h.syncAgent)
+
+	// Install connector on existing host
+	mux.HandleFunc("POST /api/v1/hosts/{hostname}/connectors/{connector}/install", h.installConnector)
+
 	// Host management
 	mux.HandleFunc("DELETE /api/v1/hosts/{hostname}", h.deleteHost)
 	mux.HandleFunc("GET /api/v1/hosts/{hostname}/provision", h.hostProvision)
@@ -70,6 +77,11 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("GET /install", h.serveInstallScript)
 	mux.HandleFunc("GET /api/v1/agent/binary/{arch}", h.serveAgentBinary)
 
+	// Notification settings
+	mux.HandleFunc("GET /api/v1/settings/notifications", h.getNotificationSettings)
+	mux.HandleFunc("PUT /api/v1/settings/notifications", h.saveNotificationSettings)
+	mux.HandleFunc("POST /api/v1/settings/notifications/test", h.testNotification)
+
 	mux.HandleFunc("GET /healthz", h.healthz)
 
 	return cors(mux)
@@ -95,6 +107,32 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 
 	h.store.Upsert(req)
 	log.Printf("report from %s: %d result(s)", req.Hostname, len(req.Results))
+
+	// Notify about new updates (deduped — only fires once per update cycle)
+	go func() {
+		cfg := h.loadNotificationSettings()
+		candidates := h.store.NewUpdates(req.Hostname, cfg.CooldownDays)
+		var filtered []store.UpdateEntry
+		for _, u := range candidates {
+			if cfg.MinCount > 0 {
+				if n := store.ParseCount(u.ValuesJSON); n >= 0 && n < cfg.MinCount {
+					continue
+				}
+			}
+			filtered = append(filtered, u)
+		}
+		if len(filtered) > 0 {
+			notifyCfg := h.toNotifyConfig(cfg)
+			updates := make([]notify.Update, len(filtered))
+			for i, u := range filtered {
+				updates[i] = notify.Update{Connector: u.Connector, DisplayName: u.DisplayName}
+			}
+			notify.Send(notifyCfg, req.Hostname, updates)
+			h.store.MarkNotified(req.Hostname, filtered)
+		}
+		h.store.ClearResolved(req.Hostname)
+	}()
+
 	w.WriteHeader(http.StatusNoContent)
 }
 

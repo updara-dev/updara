@@ -9,11 +9,12 @@ interface Props {
   loading: boolean;
   error: string | null;
   onSelectHost: (hostname: string) => void;
+  onAddHost: (initialName?: string) => void;
 }
 
 const updateKey = (hostname: string, connector: string) => `${hostname}::${connector}`;
 
-export function Dashboard({ hosts, loading, error, onSelectHost }: Props) {
+export function Dashboard({ hosts, loading, error, onSelectHost, onAddHost }: Props) {
   const { t } = useT();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [triggered, setTriggered] = useState<number | null>(null);
@@ -62,9 +63,16 @@ export function Dashboard({ hosts, loading, error, onSelectHost }: Props) {
   if (error) return <p className="status-msg status-msg--error">{t.dashboard.error(error)}</p>;
   if (hosts.length === 0) {
     return (
-      <div className="status-msg">
-        <p>{t.dashboard.noHosts}</p>
-        <p>{t.dashboard.noHostsHint}</p>
+      <div className="empty-state">
+        <div className="empty-state__self-host">
+          <div className="empty-state__icon">📡</div>
+          <h3 className="empty-state__title">{t.dashboard.selfHostTitle}</h3>
+          <p className="empty-state__hint">{t.dashboard.selfHostHint}</p>
+          <button className="btn-primary" onClick={() => onAddHost('Updara')}>
+            {t.dashboard.selfHostBtn}
+          </button>
+        </div>
+        <p className="empty-state__or">{t.dashboard.noHostsHint}</p>
       </div>
     );
   }

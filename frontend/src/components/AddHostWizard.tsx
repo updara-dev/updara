@@ -4,6 +4,7 @@ import { useT } from '../i18n';
 
 interface Props {
   onClose: () => void;
+  initialName?: string;
 }
 
 const SERVICE_TEMPLATES: { keywords: string[]; label: string; connectors: string[] }[] = [
@@ -13,6 +14,7 @@ const SERVICE_TEMPLATES: { keywords: string[]; label: string; connectors: string
   { keywords: ['homeassistant', 'home-assistant'], label: 'Home Assistant',  connectors: ['system'] },
   { keywords: ['nginx', 'caddy', 'traefik'],       label: 'Reverse Proxy',   connectors: ['apt', 'system'] },
   { keywords: ['n8n'],                              label: 'n8n',             connectors: ['system', 'n8n'] },
+  { keywords: ['updara'],                           label: 'Updara Server',   connectors: ['apt', 'system', 'docker-images'] },
   { keywords: ['docker'],                          label: 'Docker Host',     connectors: ['system', 'docker-images'] },
   { keywords: ['debian', 'ubuntu', 'server'],      label: 'Linux Server',    connectors: ['apt', 'system'] },
 ];
@@ -32,10 +34,10 @@ function groupByCategory(connectors: ConnectorMeta[]) {
   return groups;
 }
 
-export function AddHostWizard({ onClose }: Props) {
+export function AddHostWizard({ onClose, initialName = '' }: Props) {
   const { t } = useT();
   const [step, setStep] = useState<1 | 2>(1);
-  const [name, setName] = useState('');
+  const [name, setName] = useState(initialName);
   const [connectors, setConnectors] = useState<ConnectorMeta[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({ apt: true, system: true });
   const [vars, setVars] = useState<Record<string, Record<string, string>>>({});
