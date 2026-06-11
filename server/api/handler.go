@@ -54,6 +54,7 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("POST /api/v1/hosts/{hostname}/connectors/{connector}/install", h.installConnector)
 
 	// Host management
+	mux.HandleFunc("PATCH /api/v1/hosts/{hostname}/rename", h.renameHost)
 	mux.HandleFunc("DELETE /api/v1/hosts/{hostname}", h.deleteHost)
 	mux.HandleFunc("GET /api/v1/hosts/{hostname}/provision", h.hostProvision)
 	mux.HandleFunc("POST /api/v1/hosts/{hostname}/recheck/{connector}", h.recheckConnector)
@@ -232,6 +233,22 @@ func (h *Handler) flushNotificationQueue(cfg notificationSettings) {
 		batch[hostname] = updates
 	}
 	notify.SendBatch(notifyCfg, batch)
+}
+
+func (h *Handler) renameHost(w http.ResponseWriter, r *http.Request) {
+	hostname := r.PathValue("hostname")
+	var body struct {
+		DisplayName string `json:"display_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := h.store.RenameHost(hostname, strings.TrimSpace(body.DisplayName)); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) healthz(w http.ResponseWriter, r *http.Request) {

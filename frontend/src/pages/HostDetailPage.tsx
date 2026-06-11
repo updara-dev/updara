@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { fetchHostDetail, ignoreConnector, unignoreConnector, triggerUpdate, fetchCommands, removeHostConnector, deleteHost, fetchHostProvision, updateProvision, recheckConnector, fetchConnectors, syncAgent, installConnector, fetchHostStats } from '../api/client';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { fetchHostDetail, ignoreConnector, unignoreConnector, triggerUpdate, fetchCommands, removeHostConnector, deleteHost, fetchHostProvision, updateProvision, recheckConnector, fetchConnectors, syncAgent, installConnector, fetchHostStats, renameHost } from '../api/client';
 import type { ConnectorMeta, UpdateRecord } from '../api/client';
 import { useT } from '../i18n';
 import type { HostDetail, CheckResult, Command, Provision } from '../types';
@@ -433,6 +433,9 @@ export function HostDetailPage({ hostname, onBack }: Props) {
   const [showVarsDialog, setShowVarsDialog] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [updateHistory, setUpdateHistory] = useState<UpdateRecord[]>([]);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -477,6 +480,18 @@ export function HostDetailPage({ hostname, onBack }: Props) {
     if (!window.confirm(t.hostDetail.confirmDeleteHost(hostname))) return;
     await deleteHost(hostname);
     onBack();
+  };
+
+  const startEditName = () => {
+    setNameInput(detail?.host.display_name ?? '');
+    setEditingName(true);
+    setTimeout(() => nameInputRef.current?.select(), 0);
+  };
+
+  const handleRename = async () => {
+    await renameHost(hostname, nameInput.trim()).catch(console.error);
+    setEditingName(false);
+    await load();
   };
 
   if (!detail && !error) {
@@ -539,13 +554,33 @@ export function HostDetailPage({ hostname, onBack }: Props) {
       <div className="host-detail__header">
         <div className="host-detail__title">
           <span className="host-detail__status-dot" style={{ background: statusColor }} />
-          <h2>{host.hostname}</h2>
+          {editingName ? (
+            <div className="host-detail__rename">
+              <input
+                ref={nameInputRef}
+                className="host-detail__rename-input"
+                value={nameInput}
+                placeholder={host.hostname}
+                onChange={e => setNameInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setEditingName(false); }}
+                autoFocus
+              />
+              <button className="host-detail__rename-save" onClick={handleRename}>✓</button>
+              <button className="host-detail__rename-cancel" onClick={() => setEditingName(false)}>✕</button>
+            </div>
+          ) : (
+            <>
+              <h2 className="host-detail__name" onClick={startEditName}>{host.display_name || host.hostname}</h2>
+              <button className="host-detail__rename-btn" title={t.hostDetail.renameHost} onClick={startEditName}>✏</button>
+            </>
+          )}
           {host.ip_address && <span className="host-detail__ip">{host.ip_address}</span>}
         </div>
         <div className="host-detail__meta">
           <span style={{ color: statusColor }}>{statusLabel}</span>
           {' · '}agent v{host.agent_version}
           {' · '}{t.hostDetail.lastSeen(timeAgo(host.last_seen))}
+          {host.display_name && <>{' · '}<span className="host-detail__hostname-real">{host.hostname}</span></>}
         </div>
       </div>
 

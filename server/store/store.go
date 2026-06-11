@@ -122,6 +122,7 @@ func New(path string) *Store {
 	migrations := []string{
 		`ALTER TABLE hosts ADD COLUMN ip_address TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE provisions ADD COLUMN server_url TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE hosts ADD COLUMN display_name TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, m := range migrations {
 		db.Exec(m) // ignore errors (column may already exist)
@@ -155,7 +156,7 @@ func (s *Store) Upsert(req model.ReportRequest) {
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := s.db.Exec(`
-		INSERT INTO hosts (id, hostname, ip_address, agent_version, last_seen) VALUES (?,?,?,?,?)
+		INSERT INTO hosts (id, hostname, ip_address, agent_version, last_seen, display_name) VALUES (?,?,?,?,?,'')
 		ON CONFLICT(id) DO UPDATE SET
 			ip_address=excluded.ip_address,
 			agent_version=excluded.agent_version,
@@ -186,6 +187,13 @@ func (s *Store) Upsert(req model.ReportRequest) {
 	}
 }
 
+func (s *Store) RenameHost(hostname, displayName string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`UPDATE hosts SET display_name=? WHERE id=?`, displayName, hostname)
+	return err
+}
+
 func (s *Store) IsDeleted(hostname string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -213,7 +221,7 @@ func (s *Store) AllHosts() []model.HostStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rows, err := s.db.Query(`SELECT id, hostname, ip_address, agent_version, last_seen FROM hosts ORDER BY hostname`)
+	rows, err := s.db.Query(`SELECT id, hostname, display_name, ip_address, agent_version, last_seen FROM hosts ORDER BY hostname`)
 	if err != nil {
 		log.Printf("store: query hosts: %v", err)
 		return nil
@@ -225,7 +233,7 @@ func (s *Store) AllHosts() []model.HostStatus {
 	for rows.Next() {
 		var h model.Host
 		var lastSeen string
-		if err := rows.Scan(&h.ID, &h.Hostname, &h.IPAddress, &h.AgentVersion, &lastSeen); err != nil {
+		if err := rows.Scan(&h.ID, &h.Hostname, &h.DisplayName, &h.IPAddress, &h.AgentVersion, &lastSeen); err != nil {
 			continue
 		}
 		h.LastSeen, _ = time.Parse(time.RFC3339Nano, lastSeen)
@@ -247,8 +255,8 @@ func (s *Store) GetHostStatus(hostname string) (*model.HostStatus, bool) {
 
 	var h model.Host
 	var lastSeen string
-	err := s.db.QueryRow(`SELECT id, hostname, ip_address, agent_version, last_seen FROM hosts WHERE id=?`, hostname).
-		Scan(&h.ID, &h.Hostname, &h.IPAddress, &h.AgentVersion, &lastSeen)
+	err := s.db.QueryRow(`SELECT id, hostname, display_name, ip_address, agent_version, last_seen FROM hosts WHERE id=?`, hostname).
+		Scan(&h.ID, &h.Hostname, &h.DisplayName, &h.IPAddress, &h.AgentVersion, &lastSeen)
 	if err != nil {
 		return nil, false
 	}

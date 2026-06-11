@@ -1001,6 +1001,61 @@ label > small { font-size: 0.75rem; color: var(--text-muted); }
 }
 .host-detail__title h2 { font-size: 1.5rem; font-weight: 700; }
 
+.host-detail__name { cursor: pointer; }
+.host-detail__name:hover { color: var(--text-secondary); }
+
+.host-detail__rename-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  padding: 0.125rem 0.25rem;
+  opacity: 0;
+  transition: opacity 0.15s;
+  line-height: 1;
+}
+.host-detail__title:hover .host-detail__rename-btn { opacity: 1; }
+
+.host-detail__rename {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.host-detail__rename-input {
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  color: var(--text-primary);
+  padding: 0.125rem 0.5rem;
+  min-width: 220px;
+  outline: none;
+}
+.host-detail__rename-input:focus { border-color: var(--color-ok); }
+.host-detail__rename-save,
+.host-detail__rename-cancel {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+}
+.host-detail__rename-save { color: var(--color-ok); }
+.host-detail__rename-cancel { color: var(--text-muted); }
+
+.host-detail__hostname-real {
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  padding: 0.0625rem 0.375rem;
+}
+
 .host-detail__status-dot {
   width: 10px;
   height: 10px;

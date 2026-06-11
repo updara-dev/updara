@@ -93,6 +93,13 @@ export const removeHostConnector = (hostname: string, connector: string) =>
 export const deleteHost = (hostname: string) =>
   request<void>(`/api/v1/hosts/${encodeURIComponent(hostname)}`, { method: 'DELETE' });
 
+export const renameHost = (hostname: string, displayName: string) =>
+  request<void>(`/api/v1/hosts/${encodeURIComponent(hostname)}/rename`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ display_name: displayName }),
+  });
+
 export const fetchHostProvision = (hostname: string) =>
   request<import('../types').Provision>(`/api/v1/hosts/${encodeURIComponent(hostname)}/provision`);
 

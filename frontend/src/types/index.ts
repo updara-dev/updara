@@ -1,6 +1,7 @@
 export interface Host {
   id: string;
   hostname: string;
+  display_name?: string;
   ip_address?: string;
   agent_version: string;
   last_seen: string;

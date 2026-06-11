@@ -78,6 +78,8 @@ export const de: Translations = {
     noVars: 'Keine konfigurierbaren Vars für diesen Host.',
     rescan: 'Neu scannen',
     rescanQueued: '⏳ Wird gescannt…',
+    renameHost: 'Umbenennen',
+    renamePlaceholder: 'Anzeigename…',
     syncAgent: 'Agent sync',
     syncAgentQueued: '⟳ Sync läuft…',
     addConnector: '+ Connector hinzufügen',

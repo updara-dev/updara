@@ -76,6 +76,8 @@ export interface Translations {
     noVars: string;
     rescan: string;
     rescanQueued: string;
+    renameHost: string;
+    renamePlaceholder: string;
     syncAgent: string;
     syncAgentQueued: string;
     addConnector: string;

@@ -5,6 +5,7 @@ import "time"
 type Host struct {
 	ID           string    `json:"id"`
 	Hostname     string    `json:"hostname"`
+	DisplayName  string    `json:"display_name,omitempty"`
 	IPAddress    string    `json:"ip_address,omitempty"`
 	AgentVersion string    `json:"agent_version"`
 	LastSeen     time.Time `json:"last_seen"`
