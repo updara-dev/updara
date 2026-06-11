@@ -86,6 +86,10 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("PUT /api/v1/settings/notifications", h.saveNotificationSettings)
 	mux.HandleFunc("POST /api/v1/settings/notifications/test", h.testNotification)
 
+	// Statistics
+	mux.HandleFunc("GET /api/v1/stats", h.globalStats)
+	mux.HandleFunc("GET /api/v1/hosts/{hostname}/stats", h.hostStats)
+
 	mux.HandleFunc("GET /healthz", h.healthz)
 
 	return cors(mux)

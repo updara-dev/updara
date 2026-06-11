@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { fetchHostDetail, ignoreConnector, unignoreConnector, triggerUpdate, fetchCommands, removeHostConnector, deleteHost, fetchHostProvision, updateProvision, recheckConnector, fetchConnectors, syncAgent, installConnector } from '../api/client';
-import type { ConnectorMeta } from '../api/client';
+import { fetchHostDetail, ignoreConnector, unignoreConnector, triggerUpdate, fetchCommands, removeHostConnector, deleteHost, fetchHostProvision, updateProvision, recheckConnector, fetchConnectors, syncAgent, installConnector, fetchHostStats } from '../api/client';
+import type { ConnectorMeta, UpdateRecord } from '../api/client';
 import { useT } from '../i18n';
 import type { HostDetail, CheckResult, Command, Provision } from '../types';
 
@@ -432,6 +432,7 @@ export function HostDetailPage({ hostname, onBack }: Props) {
   const [connectorMeta, setConnectorMeta] = useState<ConnectorMeta[]>([]);
   const [showVarsDialog, setShowVarsDialog] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [updateHistory, setUpdateHistory] = useState<UpdateRecord[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -448,6 +449,7 @@ export function HostDetailPage({ hostname, onBack }: Props) {
     const id = setInterval(load, 30_000);
     fetchHostProvision(hostname).then(setProvision).catch(() => {});
     fetchConnectors().then(setConnectorMeta).catch(() => {});
+    fetchHostStats(hostname).then(setUpdateHistory).catch(() => {});
     return () => clearInterval(id);
   }, [load]);
 
@@ -572,6 +574,28 @@ export function HostDetailPage({ hostname, onBack }: Props) {
           onDone={load}
         />
       </div>
+
+      {updateHistory.length > 0 && (
+        <div className="update-history">
+          <h3 className="update-history__title">{t.stats.updateHistory}</h3>
+          <table className="update-history__table">
+            <tbody>
+              {updateHistory.slice(0, 15).map((rec, i) => (
+                <tr key={i} className={`update-history__row update-history__row--${rec.status}`}>
+                  <td className="update-history__connector">{rec.display_name || rec.connector}</td>
+                  <td className="update-history__status">{
+                    rec.status === 'done' ? t.stats.statusDone :
+                    rec.status === 'failed' ? t.stats.statusFailed :
+                    rec.status === 'running' ? t.stats.statusRunning :
+                    t.stats.statusPending
+                  }</td>
+                  <td className="update-history__date">{new Date(rec.updated_at).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="command-history">
         <h3 className="command-history__title">{t.hostDetail.commandHistory}</h3>

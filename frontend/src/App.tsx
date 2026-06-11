@@ -3,13 +3,14 @@ import { fetchHosts } from './api/client';
 import { Dashboard } from './pages/Dashboard';
 import { ConnectorsPage } from './pages/ConnectorsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { StatsPage } from './pages/StatsPage';
 import { HostDetailPage } from './pages/HostDetailPage';
 import { AddHostWizard } from './components/AddHostWizard';
 import { useT } from './i18n';
 import type { HostStatus } from './types';
 import './App.css';
 
-type View = 'dashboard' | 'connectors' | 'settings';
+type View = 'dashboard' | 'connectors' | 'settings' | 'stats';
 
 export default function App() {
   const { t, lang, setLang } = useT();
@@ -67,6 +68,12 @@ export default function App() {
             {t.app.nav.connectors}
           </button>
           <button
+            className={`nav-tab ${view === 'stats' ? 'active' : ''}`}
+            onClick={() => setView('stats')}
+          >
+            {t.app.nav.stats}
+          </button>
+          <button
             className={`nav-tab ${view === 'settings' ? 'active' : ''}`}
             onClick={() => setView('settings')}
           >
@@ -108,6 +115,7 @@ export default function App() {
           <HostDetailPage hostname={selectedHostname} onBack={() => { setSelectedHostname(null); load(); }} />
         )}
         {view === 'connectors' && <ConnectorsPage />}
+        {view === 'stats' && <StatsPage onSelectHost={hostname => { setSelectedHostname(hostname); setView('dashboard'); }} />}
         {view === 'settings' && <SettingsPage />}
       </main>
       {wizardInitialName !== null && (

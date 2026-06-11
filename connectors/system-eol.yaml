@@ -134,6 +134,9 @@ update:
     PRETTY=$(grep ^PRETTY_NAME= /etc/os-release | cut -d= -f2 | tr -d '"')
     echo "Current OS: $PRETTY"
     echo ""
+    echo "Updating all packages first (required before OS upgrade)..."
+    DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y
+    echo ""
     if ! command -v do-release-upgrade >/dev/null 2>&1; then
       echo "ERROR: do-release-upgrade not found."
       echo "Install: apt install ubuntu-release-upgrader-core"

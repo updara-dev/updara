@@ -145,3 +145,26 @@ export const saveNotificationSettings = (s: NotificationSettings) =>
 
 export const testNotification = () =>
   request<void>('/api/v1/settings/notifications/test', { method: 'POST' });
+
+export interface HostStatSummary {
+  hostname: string;
+  ip_address: string;
+  last_update: string;
+  total_done: number;
+  done_30days: number;
+  top_connector: string;
+}
+
+export interface UpdateRecord {
+  connector: string;
+  display_name: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const fetchGlobalStats = () =>
+  request<HostStatSummary[]>('/api/v1/stats');
+
+export const fetchHostStats = (hostname: string) =>
+  request<UpdateRecord[]>(`/api/v1/hosts/${encodeURIComponent(hostname)}/stats`);

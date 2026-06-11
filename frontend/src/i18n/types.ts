@@ -1,7 +1,7 @@
 export interface Translations {
   app: {
     tagline: string;
-    nav: { dashboard: string; connectors: string; settings: string };
+    nav: { dashboard: string; connectors: string; settings: string; stats: string };
     updates: (n: number) => string;
     hosts: (n: number) => string;
     refresh: string;
@@ -120,6 +120,26 @@ export interface Translations {
     scheduleHint: string;
     showLtsUpgrades: string;
     showLtsUpgradesHint: string;
+  };
+  stats: {
+    title: string;
+    subtitle: string;
+    loading: string;
+    noData: string;
+    host: string;
+    lastUpdate: string;
+    updates30d: string;
+    updatesTotal: string;
+    topConnector: string;
+    never: string;
+    updateHistory: string;
+    noHistory: string;
+    filterPlaceholder: string;
+    noMatch: string;
+    statusDone: string;
+    statusFailed: string;
+    statusPending: string;
+    statusRunning: string;
   };
   connectors: {
     title: string;

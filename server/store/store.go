@@ -679,6 +679,92 @@ func (s *Store) ClearResolved(hostname string) {
 	`, hostname)
 }
 
+// HostStatSummary is the per-host row returned by AllHostStats.
+type HostStatSummary struct {
+	Hostname     string `json:"hostname"`
+	IPAddress    string `json:"ip_address"`
+	LastUpdate   string `json:"last_update"`   // RFC3339 or ""
+	TotalDone    int    `json:"total_done"`
+	Done30Days   int    `json:"done_30days"`
+	TopConnector string `json:"top_connector"` // most-updated connector, "" if none
+}
+
+// UpdateRecord is one entry in a host's update history.
+type UpdateRecord struct {
+	Connector   string `json:"connector"`
+	DisplayName string `json:"display_name"`
+	Status      string `json:"status"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+// AllHostStats returns a summary row for every known host.
+func (s *Store) AllHostStats() []HostStatSummary {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows, err := s.db.Query(`
+		SELECT h.hostname, h.ip_address,
+		       COALESCE(MAX(CASE WHEN c.status='done' THEN c.updated_at END), '') as last_update,
+		       SUM(CASE WHEN c.status='done' THEN 1 ELSE 0 END) as total_done,
+		       SUM(CASE WHEN c.status='done' AND c.updated_at >= datetime('now','-30 days') THEN 1 ELSE 0 END) as done_30d
+		FROM hosts h
+		LEFT JOIN commands c ON c.host_id=h.id AND c.connector NOT LIKE '__%'
+		GROUP BY h.id, h.hostname, h.ip_address
+		ORDER BY last_update DESC
+	`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []HostStatSummary
+	for rows.Next() {
+		var r HostStatSummary
+		rows.Scan(&r.Hostname, &r.IPAddress, &r.LastUpdate, &r.TotalDone, &r.Done30Days)
+		out = append(out, r)
+	}
+	rows.Close()
+	// Fetch top connector per host (separate query to keep above query simple)
+	for i, r := range out {
+		var top string
+		s.db.QueryRow(`
+			SELECT connector FROM commands
+			WHERE host_id=(SELECT id FROM hosts WHERE hostname=?)
+			  AND connector NOT LIKE '__%' AND status='done'
+			GROUP BY connector ORDER BY COUNT(*) DESC LIMIT 1
+		`, r.Hostname).Scan(&top)
+		out[i].TopConnector = top
+	}
+	return out
+}
+
+// HostUpdateHistory returns the last N update commands for a host (all statuses).
+func (s *Store) HostUpdateHistory(hostname string, limit int) []UpdateRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows, err := s.db.Query(`
+		SELECT c.connector,
+		       COALESCE(r.display_name, c.connector),
+		       c.status, c.created_at, c.updated_at
+		FROM commands c
+		LEFT JOIN results r ON r.host_id=c.host_id AND r.connector=c.connector
+		WHERE c.host_id=(SELECT id FROM hosts WHERE hostname=?)
+		  AND c.connector NOT LIKE '__%'
+		ORDER BY c.updated_at DESC
+		LIMIT ?
+	`, hostname, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []UpdateRecord
+	for rows.Next() {
+		var rec UpdateRecord
+		rows.Scan(&rec.Connector, &rec.DisplayName, &rec.Status, &rec.CreatedAt, &rec.UpdatedAt)
+		out = append(out, rec)
+	}
+	return out
+}
+
 // EnqueueNotifications adds entries to the notification queue for batched sending.
 func (s *Store) EnqueueNotifications(hostname string, entries []UpdateEntry) {
 	s.mu.Lock()
