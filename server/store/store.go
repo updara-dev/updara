@@ -716,7 +716,7 @@ func (s *Store) AllHostStats() []HostStatSummary {
 		       SUM(CASE WHEN c.status='done' THEN 1 ELSE 0 END) as total_done,
 		       SUM(CASE WHEN c.status='done' AND c.updated_at >= datetime('now','-30 days') THEN 1 ELSE 0 END) as done_30d
 		FROM hosts h
-		LEFT JOIN commands c ON c.host_id=h.id AND c.connector NOT LIKE '__%'
+		LEFT JOIN commands c ON c.host_id=h.id AND c.connector NOT GLOB '__*'
 		GROUP BY h.id, h.hostname, h.ip_address
 		ORDER BY last_update DESC
 	`)
@@ -737,7 +737,7 @@ func (s *Store) AllHostStats() []HostStatSummary {
 		s.db.QueryRow(`
 			SELECT connector FROM commands
 			WHERE host_id=(SELECT id FROM hosts WHERE hostname=?)
-			  AND connector NOT LIKE '__%' AND status='done'
+			  AND connector NOT GLOB '__*' AND status='done'
 			GROUP BY connector ORDER BY COUNT(*) DESC LIMIT 1
 		`, r.Hostname).Scan(&top)
 		out[i].TopConnector = top
@@ -756,7 +756,7 @@ func (s *Store) HostUpdateHistory(hostname string, limit int) []UpdateRecord {
 		FROM commands c
 		LEFT JOIN results r ON r.host_id=c.host_id AND r.connector=c.connector
 		WHERE c.host_id=(SELECT id FROM hosts WHERE hostname=?)
-		  AND c.connector NOT LIKE '__%'
+		  AND c.connector NOT GLOB '__*'
 		ORDER BY c.updated_at DESC
 		LIMIT ?
 	`, hostname, limit)
