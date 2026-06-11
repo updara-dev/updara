@@ -40,7 +40,7 @@ export function HostCard({ status, selected, onToggleSelect, onClick }: Props) {
       <div className="host-card__header">
         <div className="host-card__title">
           <span className="host-card__dot" style={{ background: color }} />
-          <h2>{host.hostname}</h2>
+          <h2>{host.display_name || host.hostname}</h2>
         </div>
         <span className="host-card__meta">
           {host.ip_address && <span className="host-ip">{host.ip_address} · </span>}

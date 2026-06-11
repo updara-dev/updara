@@ -193,6 +193,115 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .host-card__empty { font-size: 0.8125rem; color: var(--text-muted); text-align: center; padding: 0.5rem; }
 
+/* ── Dashboard toolbar ───────────────────────────────────── */
+.dashboard-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.dashboard-toolbar__left { display: flex; align-items: center; gap: 0.5rem; }
+
+.view-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  overflow: hidden;
+}
+.view-toggle__btn {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0.3rem 0.625rem;
+  font-size: 1rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+.view-toggle__btn:hover { background: var(--bg-surface); color: var(--text-primary); }
+.view-toggle__btn--active { background: var(--bg-surface); color: var(--text-primary); }
+
+/* ── Host list view ──────────────────────────────────────── */
+.host-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.host-list-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.625rem 1rem;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.host-list-row:hover { background: var(--bg-surface); }
+
+.host-list-row__check { width: 1.25rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.host-list-row__check input[type="checkbox"] { cursor: pointer; }
+
+.host-list-row__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.host-list-row__name {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.host-list-row__ip {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.4rem;
+  flex-shrink: 0;
+}
+
+.host-list-row__badges {
+  display: flex;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
+.host-list-row__badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+}
+.host-list-row__badge--ok     { color: var(--color-ok); background: color-mix(in srgb, var(--color-ok) 12%, transparent); }
+.host-list-row__badge--update { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 12%, transparent); }
+.host-list-row__badge--error  { color: var(--color-critical); background: color-mix(in srgb, var(--color-critical) 12%, transparent); }
+
+.host-list-row__agent {
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+.host-list-row__agent--online  { color: var(--color-ok); }
+.host-list-row__agent--stale   { color: var(--color-warning); }
+.host-list-row__agent--offline { color: var(--color-critical); }
+
+.host-list-row__time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  min-width: 2.5rem;
+  text-align: right;
+}
+
 /* ── Check row ───────────────────────────────────────────── */
 .bulk-controls {
   display: flex;
