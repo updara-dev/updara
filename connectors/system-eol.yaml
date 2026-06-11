@@ -16,6 +16,7 @@ check:
         from urllib.request import urlopen, Request
         from urllib.error import URLError
     except ImportError:
+        print("needs_update=false")
         print("status=unknown")
         sys.exit(0)
 
@@ -29,6 +30,7 @@ check:
                     k, v = line.split('=', 1)
                     info[k] = v.strip('"')
     except Exception:
+        print("needs_update=false")
         print("status=unknown")
         sys.exit(0)
 
@@ -62,6 +64,7 @@ check:
             None
         )
         if current_data is None:
+            print("needs_update=false")
             print("status=unknown")
             print(f'distro={distro_name}')
             sys.exit(0)
@@ -105,21 +108,25 @@ check:
                 print(f'upgrade_to={best[1]} LTS')
                 status = 'upgrade_available'
 
+        needs_update = status in ('eol', 'upgrade_available')
+        print(f'needs_update={"true" if needs_update else "false"}')
         print(f'status={status}')
         print(f'distro={distro_name}')
 
     except Exception:
         # API unreachable or distro not in database — don't false-alarm
+        print("needs_update=false")
         print("status=unknown")
         print(f'distro={distro_name}')
     PYEOF
   parse:
-    status:     "$status"
-    distro:     "$distro"
-    eol_date:   "$eol_date"
-    days_eol:   "$days_eol"
-    upgrade_to: "$upgrade_to"
-  update_available: "status != supported"
+    needs_update: "$needs_update"
+    status:       "$status"
+    distro:       "$distro"
+    eol_date:     "$eol_date"
+    days_eol:     "$days_eol"
+    upgrade_to:   "$upgrade_to"
+  update_available: "needs_update == true"
   interval: 86400
 
 # WARNING: OS upgrades are complex, time-consuming, and can break systems.
@@ -133,6 +140,12 @@ update:
     VERSION=$(grep ^VERSION_ID= /etc/os-release | cut -d= -f2 | tr -d '"')
     PRETTY=$(grep ^PRETTY_NAME= /etc/os-release | cut -d= -f2 | tr -d '"')
     echo "Current OS: $PRETTY"
+    echo ""
+    # Save working DNS servers before upgrade — Ubuntu upgrades can break resolv.conf
+    # by switching the symlink to stub-resolv.conf (which needs systemd-resolved to work,
+    # but in Proxmox LXCs it often has no upstream DNS servers configured)
+    SAVED_DNS=$(grep '^nameserver' /etc/resolv.conf 2>/dev/null || echo "nameserver 8.8.8.8")
+    echo "Saved DNS: $(echo $SAVED_DNS | tr '\n' ' ')"
     echo ""
     echo "Updating all packages first (required before OS upgrade)..."
     DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get dist-upgrade -y
@@ -166,6 +179,17 @@ update:
     ln -sf /usr/bin/gpg /usr/local/bin/gpg 2>/dev/null || true
     echo "Starting upgrade (this may take 20-40 minutes)..."
     DEBIAN_FRONTEND=noninteractive do-release-upgrade -f DistUpgradeViewNonInteractive
+    UPGRADE_RC=$?
+    echo ""
+    # Restore DNS — Ubuntu upgrades often replace /etc/resolv.conf symlink with
+    # stub-resolv.conf, breaking DNS in Proxmox LXC environments
+    echo "Restoring DNS configuration..."
+    rm -f /etc/resolv.conf
+    printf '%s\n' $SAVED_DNS > /etc/resolv.conf
+    echo "nameserver 8.8.8.8" >> /etc/resolv.conf
+    sort -u /etc/resolv.conf -o /etc/resolv.conf
+    echo "DNS restored: $(cat /etc/resolv.conf | grep nameserver | tr '\n' ' ')"
+    exit $UPGRADE_RC
   requires_confirmation: true
 
 notifications:
