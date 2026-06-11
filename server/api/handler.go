@@ -4,6 +4,10 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/updara/server/model"
 	"github.com/updara/server/notify"
@@ -105,12 +109,19 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 		h.store.ClaimProvision(req.Token, req.Hostname)
 	}
 
+	cfg := h.loadNotificationSettings()
+	if !cfg.ShowLTSUpgrades {
+		for i, r := range req.Results {
+			if r.Connector == "system-eol" && r.Values["status"] == "upgrade_available" {
+				req.Results[i].UpdateAvailable = false
+			}
+		}
+	}
 	h.store.Upsert(req)
 	log.Printf("report from %s: %d result(s)", req.Hostname, len(req.Results))
 
 	// Notify about new updates (deduped — only fires once per update cycle)
-	go func() {
-		cfg := h.loadNotificationSettings()
+	go func(cfg notificationSettings) {
 		candidates := h.store.NewUpdates(req.Hostname, cfg.CooldownDays)
 		var filtered []store.UpdateEntry
 		for _, u := range candidates {
@@ -122,16 +133,20 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 			filtered = append(filtered, u)
 		}
 		if len(filtered) > 0 {
-			notifyCfg := h.toNotifyConfig(cfg)
-			updates := make([]notify.Update, len(filtered))
-			for i, u := range filtered {
-				updates[i] = notify.Update{Connector: u.Connector, DisplayName: u.DisplayName}
-			}
-			notify.Send(notifyCfg, req.Hostname, updates)
 			h.store.MarkNotified(req.Hostname, filtered)
+			if cfg.BatchSchedule == "immediate" {
+				notifyCfg := h.toNotifyConfig(cfg)
+				updates := make([]notify.Update, len(filtered))
+				for i, u := range filtered {
+					updates[i] = notify.Update{Connector: u.Connector, DisplayName: u.DisplayName}
+				}
+				notify.Send(notifyCfg, req.Hostname, updates)
+			} else {
+				h.store.EnqueueNotifications(req.Hostname, filtered)
+			}
 		}
 		h.store.ClearResolved(req.Hostname)
-	}()
+	}(cfg)
 
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -139,6 +154,80 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) hosts(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(h.store.AllHosts())
+}
+
+// StartNotificationScheduler runs a background ticker that flushes the
+// notification queue at the configured schedule (hourly, daily, twice_daily).
+func (h *Handler) StartNotificationScheduler() {
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		var lastFired time.Time
+		for now := range ticker.C {
+			cfg := h.loadNotificationSettings()
+			if cfg.BatchSchedule == "immediate" {
+				continue
+			}
+			nowTrunc := now.Truncate(time.Minute)
+			if nowTrunc.Equal(lastFired) {
+				continue
+			}
+			if h.shouldFireBatch(cfg, now) {
+				h.flushNotificationQueue(cfg)
+				lastFired = nowTrunc
+			}
+		}
+	}()
+}
+
+func (h *Handler) shouldFireBatch(cfg notificationSettings, now time.Time) bool {
+	switch cfg.BatchSchedule {
+	case "hourly":
+		return now.Minute() == 0
+	case "daily":
+		hr, min := parseHHMM(cfg.BatchTime1)
+		return now.Hour() == hr && now.Minute() == min
+	case "twice_daily":
+		hr1, min1 := parseHHMM(cfg.BatchTime1)
+		hr2, min2 := parseHHMM(cfg.BatchTime2)
+		return (now.Hour() == hr1 && now.Minute() == min1) ||
+			(now.Hour() == hr2 && now.Minute() == min2)
+	}
+	return false
+}
+
+func parseHHMM(s string) (int, int) {
+	parts := strings.SplitN(s, ":", 2)
+	if len(parts) != 2 {
+		return 7, 0
+	}
+	hr, _ := strconv.Atoi(parts[0])
+	min, _ := strconv.Atoi(parts[1])
+	return hr, min
+}
+
+func (h *Handler) flushNotificationQueue(cfg notificationSettings) {
+	queued := h.store.FlushQueue()
+	if len(queued) == 0 {
+		return
+	}
+	hostnames := make([]string, 0, len(queued))
+	for hostname := range queued {
+		hostnames = append(hostnames, hostname)
+	}
+	sort.Strings(hostnames)
+
+	notifyCfg := h.toNotifyConfig(cfg)
+	batch := make(map[string][]notify.Update, len(queued))
+	for _, hostname := range hostnames {
+		entries := queued[hostname]
+		updates := make([]notify.Update, len(entries))
+		for i, e := range entries {
+			updates[i] = notify.Update{Connector: e.Connector, DisplayName: e.DisplayName}
+		}
+		batch[hostname] = updates
+	}
+	notify.SendBatch(notifyCfg, batch)
 }
 
 func (h *Handler) healthz(w http.ResponseWriter, r *http.Request) {

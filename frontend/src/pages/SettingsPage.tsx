@@ -7,6 +7,8 @@ const empty: NotificationSettings = {
   ntfy_url: '', ntfy_topic: '', ntfy_enabled: false,
   telegram_token: '', telegram_chat_id: '', telegram_enabled: false,
   cooldown_days: 3, min_count: 0,
+  batch_schedule: 'immediate', batch_time1: '07:00', batch_time2: '19:00',
+  show_lts_upgrades: true,
 };
 
 export function SettingsPage() {
@@ -112,6 +114,44 @@ export function SettingsPage() {
               onChange={e => set('min_count', parseInt(e.target.value) || 0)} />
             <span className="settings-num-row__hint">{t.settings.minCountHint}</span>
           </div>
+          <div className="settings-num-row">
+            <label className="settings-num-row__label">{t.settings.showLtsUpgrades}</label>
+            <input type="checkbox" checked={cfg.show_lts_upgrades}
+              onChange={e => set('show_lts_upgrades', e.target.checked)} />
+            <span className="settings-num-row__hint">{t.settings.showLtsUpgradesHint}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section__header">
+          <h3>{t.settings.scheduleSection}</h3>
+        </div>
+        <p className="settings-section__hint">{t.settings.scheduleHint}</p>
+        <div className="settings-num-fields">
+          <div className="settings-num-row">
+            <label className="settings-num-row__label">{t.settings.scheduleLabel}</label>
+            <select className="settings-select" value={cfg.batch_schedule} onChange={e => set('batch_schedule', e.target.value)}>
+              <option value="immediate">{t.settings.scheduleImmediate}</option>
+              <option value="hourly">{t.settings.scheduleHourly}</option>
+              <option value="daily">{t.settings.scheduleDaily}</option>
+              <option value="twice_daily">{t.settings.scheduleTwiceDaily}</option>
+            </select>
+          </div>
+          {(cfg.batch_schedule === 'daily' || cfg.batch_schedule === 'twice_daily') && (
+            <div className="settings-num-row">
+              <label className="settings-num-row__label">{t.settings.scheduleTime1}</label>
+              <input className="settings-num-row__input settings-time-input" type="time" value={cfg.batch_time1}
+                onChange={e => set('batch_time1', e.target.value)} />
+            </div>
+          )}
+          {cfg.batch_schedule === 'twice_daily' && (
+            <div className="settings-num-row">
+              <label className="settings-num-row__label">{t.settings.scheduleTime2}</label>
+              <input className="settings-num-row__input settings-time-input" type="time" value={cfg.batch_time2}
+                onChange={e => set('batch_time2', e.target.value)} />
+            </div>
+          )}
         </div>
       </div>
 

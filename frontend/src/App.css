@@ -1319,6 +1319,28 @@ label > small { font-size: 0.75rem; color: var(--text-muted); }
   line-height: 1.4;
 }
 
+.settings-select {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.4rem 0.625rem;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  font-family: inherit;
+  cursor: pointer;
+  min-width: 12rem;
+}
+
+.settings-select:focus {
+  outline: none;
+  border-color: var(--color-ok);
+}
+
+.settings-time-input {
+  width: 7rem;
+  color-scheme: dark;
+}
+
 .settings-toggle {
   display: flex;
   align-items: center;

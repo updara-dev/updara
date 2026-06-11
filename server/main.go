@@ -18,6 +18,7 @@ func main() {
 
 	s := store.New(dbPath)
 	h := api.NewHandler(s, connectorsDir, binariesDir, publicURL)
+	h.StartNotificationScheduler()
 
 	log.Printf("Updara server listening on %s", addr)
 	if err := http.ListenAndServe(addr, h.Router()); err != nil {

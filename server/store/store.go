@@ -94,6 +94,15 @@ CREATE TABLE IF NOT EXISTS notified_updates (
     PRIMARY KEY (host_id, connector)
 );
 
+CREATE TABLE IF NOT EXISTS notification_queue (
+    hostname     TEXT NOT NULL,
+    connector    TEXT NOT NULL,
+    display_name TEXT NOT NULL DEFAULT '',
+    values_json  TEXT NOT NULL DEFAULT '{}',
+    queued_at    TEXT NOT NULL,
+    PRIMARY KEY (hostname, connector)
+);
+
 CREATE INDEX IF NOT EXISTS idx_results_host    ON results(host_id);
 CREATE INDEX IF NOT EXISTS idx_commands_host   ON commands(host_id);
 CREATE INDEX IF NOT EXISTS idx_commands_status ON commands(status);
@@ -668,4 +677,37 @@ func (s *Store) ClearResolved(hostname string) {
 		        AND (r.error IS NULL OR r.error='')
 		  )
 	`, hostname)
+}
+
+// EnqueueNotifications adds entries to the notification queue for batched sending.
+func (s *Store) EnqueueNotifications(hostname string, entries []UpdateEntry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	for _, e := range entries {
+		s.db.Exec(`INSERT OR REPLACE INTO notification_queue(hostname,connector,display_name,values_json,queued_at) VALUES(?,?,?,?,?)`,
+			hostname, e.Connector, e.DisplayName, e.ValuesJSON, now)
+	}
+}
+
+// FlushQueue returns all queued notifications grouped by hostname, then clears the queue.
+func (s *Store) FlushQueue() map[string][]UpdateEntry {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows, err := s.db.Query(`SELECT hostname, connector, display_name, values_json FROM notification_queue ORDER BY hostname, queued_at`)
+	if err != nil {
+		return nil
+	}
+	result := make(map[string][]UpdateEntry)
+	for rows.Next() {
+		var hostname string
+		var e UpdateEntry
+		rows.Scan(&hostname, &e.Connector, &e.DisplayName, &e.ValuesJSON)
+		result[hostname] = append(result[hostname], e)
+	}
+	rows.Close()
+	if len(result) > 0 {
+		s.db.Exec(`DELETE FROM notification_queue`)
+	}
+	return result
 }

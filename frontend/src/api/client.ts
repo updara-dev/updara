@@ -127,6 +127,10 @@ export interface NotificationSettings {
   telegram_enabled: boolean;
   cooldown_days: number;
   min_count: number;
+  batch_schedule: string;
+  batch_time1: string;
+  batch_time2: string;
+  show_lts_upgrades: boolean;
 }
 
 export const fetchNotificationSettings = () =>

@@ -48,32 +48,64 @@ check:
     }.get(distro_id, distro_id)
 
     try:
-        url = f'https://endoflife.date/api/{api_id}/{version_id}.json'
-        data = json.loads(urlopen(url, timeout=10).read())
-        eol_raw = data.get('eol', False)
+        today = datetime.date.today()
+        req = Request(
+            f'https://endoflife.date/api/{api_id}.json',
+            headers={'User-Agent': 'updara-agent/1.0'}
+        )
+        all_data = json.loads(urlopen(req, timeout=10).read())
 
-        if eol_raw is False:
-            print("status=supported")
+        # Match current version (try full version_id, then major.minor)
+        ver_short = '.'.join(version_id.split('.')[:2])
+        current_data = next(
+            (v for v in all_data if str(v.get('cycle','')) in (version_id, ver_short)),
+            None
+        )
+        if current_data is None:
+            print("status=unknown")
             print(f'distro={distro_name}')
             sys.exit(0)
 
+        # Determine EOL status
+        eol_raw = current_data.get('eol', False)
+        status = 'supported'
         if eol_raw is True:
-            eol_date = 'unknown'
-            days = 0
-        else:
-            eol_date = str(eol_raw)
+            status = 'eol'
+            print(f'eol_date=unknown')
+        elif eol_raw is not False:
             try:
-                eol_dt = datetime.date.fromisoformat(eol_date)
-                days = (datetime.date.today() - eol_dt).days
+                eol_dt = datetime.date.fromisoformat(str(eol_raw))
+                if eol_dt < today:
+                    status = 'eol'
+                    print(f'eol_date={eol_raw}')
+                    print(f'days_eol={(today - eol_dt).days}')
             except Exception:
-                days = 0
+                pass
 
-        if days > 0:
-            print("status=eol")
-            print(f'eol_date={eol_date}')
-            print(f'days_eol={days}')
-        else:
-            print("status=supported")
+        # If still supported, check for a newer LTS to offer as optional upgrade
+        if status == 'supported':
+            cur_tuple = tuple(int(x) for x in ver_short.split('.') if x.isdigit())
+            newer_lts = []
+            for v in all_data:
+                if not v.get('lts'):
+                    continue
+                v_eol = v.get('eol')
+                if v_eol is True:
+                    continue
+                try:
+                    if v_eol is not False and datetime.date.fromisoformat(str(v_eol)) <= today:
+                        continue
+                except Exception:
+                    continue
+                c_parts = tuple(int(x) for x in str(v.get('cycle','')).split('.') if x.isdigit())
+                if c_parts > cur_tuple:
+                    newer_lts.append((c_parts, v.get('cycle','')))
+            if newer_lts:
+                best = max(newer_lts)
+                print(f'upgrade_to={best[1]} LTS')
+                status = 'upgrade_available'
+
+        print(f'status={status}')
         print(f'distro={distro_name}')
 
     except Exception:
@@ -82,11 +114,12 @@ check:
         print(f'distro={distro_name}')
     PYEOF
   parse:
-    status:   "$status"
-    distro:   "$distro"
-    eol_date: "$eol_date"
-    days_eol: "$days_eol"
-  update_available: "status == eol"
+    status:     "$status"
+    distro:     "$distro"
+    eol_date:   "$eol_date"
+    days_eol:   "$days_eol"
+    upgrade_to: "$upgrade_to"
+  update_available: "status != supported"
   interval: 86400
 
 # WARNING: OS upgrades are complex, time-consuming, and can break systems.

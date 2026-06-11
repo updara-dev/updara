@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -40,6 +41,40 @@ func Send(cfg Config, hostname string, updates []Update) {
 
 	title := fmt.Sprintf("Updates available — %s", hostname)
 	body := strings.Join(lines, "\n")
+
+	if cfg.NtfyEnabled && cfg.NtfyURL != "" && cfg.NtfyTopic != "" {
+		go sendNtfy(cfg.NtfyURL, cfg.NtfyTopic, title, body)
+	}
+	if cfg.TelegramEnabled && cfg.TelegramToken != "" && cfg.TelegramChatID != "" {
+		go sendTelegram(cfg.TelegramToken, cfg.TelegramChatID, title+"\n"+body)
+	}
+}
+
+// SendBatch sends a single notification summarising updates across multiple hosts.
+func SendBatch(cfg Config, batch map[string][]Update) {
+	if len(batch) == 0 {
+		return
+	}
+	hostnames := make([]string, 0, len(batch))
+	for h := range batch {
+		hostnames = append(hostnames, h)
+	}
+	sort.Strings(hostnames)
+
+	var sb strings.Builder
+	for _, hostname := range hostnames {
+		sb.WriteString(hostname + "\n")
+		for _, u := range batch[hostname] {
+			name := u.DisplayName
+			if name == "" {
+				name = u.Connector
+			}
+			sb.WriteString("  • " + name + "\n")
+		}
+	}
+
+	title := fmt.Sprintf("Updates available — %d host(s)", len(batch))
+	body := strings.TrimRight(sb.String(), "\n")
 
 	if cfg.NtfyEnabled && cfg.NtfyURL != "" && cfg.NtfyTopic != "" {
 		go sendNtfy(cfg.NtfyURL, cfg.NtfyTopic, title, body)

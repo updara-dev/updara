@@ -19,6 +19,12 @@ type notificationSettings struct {
 
 	CooldownDays int `json:"cooldown_days"`
 	MinCount     int `json:"min_count"`
+
+	BatchSchedule string `json:"batch_schedule"` // immediate | hourly | daily | twice_daily
+	BatchTime1    string `json:"batch_time1"`     // HH:MM — daily + twice_daily first time
+	BatchTime2    string `json:"batch_time2"`     // HH:MM — twice_daily second time
+
+	ShowLTSUpgrades bool `json:"show_lts_upgrades"` // treat available LTS upgrade as update_available
 }
 
 func (h *Handler) loadNotificationSettings() notificationSettings {
@@ -31,6 +37,19 @@ func (h *Handler) loadNotificationSettings() notificationSettings {
 	if v, err := strconv.Atoi(s["notification_min_count"]); err == nil && v >= 0 {
 		minCount = v
 	}
+	batchSchedule := s["notification_batch_schedule"]
+	if batchSchedule == "" {
+		batchSchedule = "immediate"
+	}
+	batchTime1 := s["notification_batch_time1"]
+	if batchTime1 == "" {
+		batchTime1 = "07:00"
+	}
+	batchTime2 := s["notification_batch_time2"]
+	if batchTime2 == "" {
+		batchTime2 = "19:00"
+	}
+	showLTS := s["show_lts_upgrades"] != "false" // default true
 	return notificationSettings{
 		NtfyURL:         s["ntfy_url"],
 		NtfyTopic:       s["ntfy_topic"],
@@ -40,6 +59,10 @@ func (h *Handler) loadNotificationSettings() notificationSettings {
 		TelegramEnabled: s["telegram_enabled"] == "true",
 		CooldownDays:    cooldown,
 		MinCount:        minCount,
+		BatchSchedule:   batchSchedule,
+		BatchTime1:      batchTime1,
+		BatchTime2:      batchTime2,
+		ShowLTSUpgrades: showLTS,
 	}
 }
 
@@ -82,6 +105,10 @@ func (h *Handler) saveNotificationSettings(w http.ResponseWriter, r *http.Reques
 	h.store.SetSetting("telegram_enabled", boolStr(ns.TelegramEnabled))
 	h.store.SetSetting("notification_cooldown_days", strconv.Itoa(ns.CooldownDays))
 	h.store.SetSetting("notification_min_count", strconv.Itoa(ns.MinCount))
+	h.store.SetSetting("notification_batch_schedule", ns.BatchSchedule)
+	h.store.SetSetting("notification_batch_time1", ns.BatchTime1)
+	h.store.SetSetting("notification_batch_time2", ns.BatchTime2)
+	h.store.SetSetting("show_lts_upgrades", boolStr(ns.ShowLTSUpgrades))
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -109,6 +109,17 @@ export interface Translations {
     cooldownDaysHint: string;
     minCount: string;
     minCountHint: string;
+    scheduleSection: string;
+    scheduleLabel: string;
+    scheduleImmediate: string;
+    scheduleHourly: string;
+    scheduleDaily: string;
+    scheduleTwiceDaily: string;
+    scheduleTime1: string;
+    scheduleTime2: string;
+    scheduleHint: string;
+    showLtsUpgrades: string;
+    showLtsUpgradesHint: string;
   };
   connectors: {
     title: string;
