@@ -200,7 +200,36 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   justify-content: space-between;
   margin-bottom: 0.75rem;
 }
-.dashboard-toolbar__left { display: flex; align-items: center; gap: 0.5rem; }
+.dashboard-toolbar__left { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.dashboard-toolbar__right { display: flex; align-items: center; gap: 0.5rem; }
+
+.filter-input {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.625rem;
+  width: 140px;
+  outline: none;
+}
+.filter-input:focus { border-color: var(--text-muted); }
+.filter-input::placeholder { color: var(--text-muted); }
+
+.filter-pill {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.filter-pill:hover { color: var(--text-secondary); border-color: var(--text-muted); }
+.filter-pill--active.filter-pill--updates { color: var(--color-warning); border-color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 12%, transparent); }
+.filter-pill--active.filter-pill--errors  { color: var(--color-critical); border-color: var(--color-critical); background: color-mix(in srgb, var(--color-critical) 12%, transparent); }
 
 .view-toggle {
   display: flex;

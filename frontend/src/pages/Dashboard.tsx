@@ -69,10 +69,20 @@ export function Dashboard({ hosts, loading, error, onSelectHost, onAddHost }: Pr
   const [view, setView] = useState<'grid' | 'list'>(() =>
     (localStorage.getItem('dashboard-view') as 'grid' | 'list') ?? 'grid'
   );
+  const [filterText, setFilterText] = useState('');
+  const [filterStatus, setFilterStatus] = useState<Set<'updates' | 'errors'>>(new Set());
 
   const switchView = (v: 'grid' | 'list') => {
     setView(v);
     localStorage.setItem('dashboard-view', v);
+  };
+
+  const toggleStatusFilter = (s: 'updates' | 'errors') => {
+    setFilterStatus(prev => {
+      const next = new Set(prev);
+      next.has(s) ? next.delete(s) : next.add(s);
+      return next;
+    });
   };
 
   const allUpdatable = useMemo(() =>
@@ -115,6 +125,20 @@ export function Dashboard({ hosts, loading, error, onSelectHost, onAddHost }: Pr
     setTimeout(() => setTriggered(null), 4000);
   };
 
+  const visibleHosts = useMemo(() => {
+    let h = hosts;
+    if (filterText.trim()) {
+      const q = filterText.toLowerCase();
+      h = h.filter(hs =>
+        (hs.host.display_name || hs.host.hostname).toLowerCase().includes(q) ||
+        (hs.host.ip_address ?? '').includes(q)
+      );
+    }
+    if (filterStatus.has('updates')) h = h.filter(hs => (hs.results ?? []).some(r => r.update_available && !r.ignored));
+    if (filterStatus.has('errors'))  h = h.filter(hs => (hs.results ?? []).some(r => r.error && !r.ignored));
+    return h;
+  }, [hosts, filterText, filterStatus]);
+
   if (loading && hosts.length === 0) return <p className="status-msg">{t.dashboard.loading}</p>;
   if (error) return <p className="status-msg status-msg--error">{t.dashboard.error(error)}</p>;
   if (hosts.length === 0) {
@@ -142,16 +166,33 @@ export function Dashboard({ hosts, loading, error, onSelectHost, onAddHost }: Pr
               {allSelected ? t.dashboard.deselectAll : t.dashboard.selectAll}
             </button>
           )}
+          <button
+            className={`filter-pill${filterStatus.has('updates') ? ' filter-pill--active filter-pill--updates' : ''}`}
+            onClick={() => toggleStatusFilter('updates')}
+          >⚠ Updates</button>
+          <button
+            className={`filter-pill${filterStatus.has('errors') ? ' filter-pill--active filter-pill--errors' : ''}`}
+            onClick={() => toggleStatusFilter('errors')}
+          >✕ Errors</button>
         </div>
-        <div className="view-toggle">
-          <button className={`view-toggle__btn${view === 'grid' ? ' view-toggle__btn--active' : ''}`} title="Card view" onClick={() => switchView('grid')}>⊞</button>
-          <button className={`view-toggle__btn${view === 'list' ? ' view-toggle__btn--active' : ''}`} title="List view" onClick={() => switchView('list')}>☰</button>
+        <div className="dashboard-toolbar__right">
+          <input
+            className="filter-input"
+            type="text"
+            placeholder="Filter…"
+            value={filterText}
+            onChange={e => setFilterText(e.target.value)}
+          />
+          <div className="view-toggle">
+            <button className={`view-toggle__btn${view === 'grid' ? ' view-toggle__btn--active' : ''}`} title="Card view" onClick={() => switchView('grid')}>⊞</button>
+            <button className={`view-toggle__btn${view === 'list' ? ' view-toggle__btn--active' : ''}`} title="List view" onClick={() => switchView('list')}>☰</button>
+          </div>
         </div>
       </div>
 
       {view === 'grid' ? (
         <div className="host-grid">
-          {hosts.map(h => (
+          {visibleHosts.map(h => (
             <HostCard
               key={h.host.id}
               status={h}
@@ -163,7 +204,7 @@ export function Dashboard({ hosts, loading, error, onSelectHost, onAddHost }: Pr
         </div>
       ) : (
         <div className="host-list">
-          {hosts.map(h => (
+          {visibleHosts.map(h => (
             <HostListRow
               key={h.host.id}
               status={h}
@@ -173,6 +214,9 @@ export function Dashboard({ hosts, loading, error, onSelectHost, onAddHost }: Pr
             />
           ))}
         </div>
+      )}
+      {visibleHosts.length === 0 && hosts.length > 0 && (
+        <p className="status-msg">{filterText ? `No hosts matching "${filterText}"` : 'No hosts match the active filter.'}</p>
       )}
 
       {(selected.size > 0 || triggered !== null) && (
