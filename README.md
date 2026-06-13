@@ -76,25 +76,47 @@ The server stores host state and queues commands. Agents poll for pending comman
 
 ### 1. Install the server
 
-On any Linux host with Docker — pick one:
+You need a Linux host with Docker installed. Then pick one of these two options:
 
-**Option A — one-liner:**
+---
+
+**Option A — one-liner (fastest):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/updara-dev/updara/main/install-server.sh | sh
 ```
+Auto-detects your server IP, downloads everything, starts Updara, and prints the login token.
 
-**Option B — manual (recommended if you want to see what runs):**
+---
+
+**Option B — manual (transparent, recommended):**
+
+Download the two config files:
 ```bash
 mkdir /opt/updara && cd /opt/updara
-curl -fsSL https://raw.githubusercontent.com/updara-dev/updara/main/docker-compose.dist.yml -o docker-compose.dist.yml
-echo "UPDARA_PUBLIC_URL=http://$(hostname -I | awk '{print $1}'):8080" > .env
-docker compose -f docker-compose.dist.yml up -d
-docker compose -f docker-compose.dist.yml logs server | grep "UPDARA TOKEN"
+curl -fsSL https://raw.githubusercontent.com/updara-dev/updara/main/docker-compose.dist.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/updara-dev/updara/main/.env.example -o .env
 ```
 
-Both options auto-detect the server IP and print the login token at the end.
+Open `.env` and set your server's IP address:
+```
+UPDARA_PUBLIC_URL=http://10.0.1.50:8080
+```
 
-**Frontend:** `http://<server-ip>:4000`
+Start Updara:
+```bash
+docker compose up -d
+```
+
+Get your login token:
+```bash
+docker compose logs server | grep "UPDARA TOKEN"
+```
+
+---
+
+Open `http://<server-ip>:4000` in your browser and log in with the token.
+
+**Frontend:** `http://<server-ip>:4000`  
 **API:** `http://<server-ip>:8080`
 
 ### 2. Add a host
