@@ -14,5 +14,6 @@ FROM alpine:3.20
 RUN apk add --no-cache ca-certificates
 COPY --from=server-builder /updara-server /updara-server
 COPY --from=agent-builder /binaries /app/binaries
+COPY connectors/ /app/connectors/
 EXPOSE 8080
 ENTRYPOINT ["/updara-server"]

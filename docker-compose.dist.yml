@@ -1,8 +1,6 @@
 services:
   server:
-    build:
-      context: .
-      dockerfile: Dockerfile.server
+    image: ghcr.io/updara-dev/updara-server:latest
     ports:
       - "8080:8080"
     environment:
@@ -10,10 +8,10 @@ services:
       DB_PATH: "/data/updara.db"
       CONNECTORS_DIR: "/app/connectors"
       BINARIES_DIR: "/app/binaries"
-      PUBLIC_URL: "${UPDARA_PUBLIC_URL:-http://10.0.0.244:8080}"
+      PUBLIC_URL: "${UPDARA_PUBLIC_URL:-http://localhost:8080}"
     volumes:
-      - ./connectors:/app/connectors
       - updara_data:/data
+      - updara_connectors:/app/connectors
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
@@ -22,7 +20,7 @@ services:
       retries: 3
 
   frontend:
-    build: ./frontend
+    image: ghcr.io/updara-dev/updara-frontend:latest
     ports:
       - "4000:80"
     restart: unless-stopped
@@ -32,3 +30,4 @@ services:
 
 volumes:
   updara_data:
+  updara_connectors:
