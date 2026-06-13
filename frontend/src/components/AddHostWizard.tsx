@@ -10,7 +10,7 @@ interface Props {
 const SERVICE_TEMPLATES: { keywords: string[]; label: string; connectors: string[] }[] = [
   { keywords: ['pihole', 'pi-hole'],              label: 'Pi-hole',         connectors: ['apt', 'system', 'pihole'] },
   { keywords: ['adguard', 'adguardhome'],          label: 'AdGuard Home',    connectors: ['apt', 'system'] },
-  { keywords: ['proxmox', 'pve'],                  label: 'Proxmox VE',      connectors: ['apt', 'system'] },
+  { keywords: ['proxmox', 'pve'],                  label: 'Proxmox VE',      connectors: ['proxmox-apt', 'system', 'proxmox-eol'] },
   { keywords: ['homeassistant', 'home-assistant'], label: 'Home Assistant',  connectors: ['system'] },
   { keywords: ['nginx', 'caddy', 'traefik'],       label: 'Reverse Proxy',   connectors: ['apt', 'system'] },
   { keywords: ['n8n'],                              label: 'n8n',             connectors: ['system', 'n8n'] },
@@ -43,7 +43,7 @@ export function AddHostWizard({ onClose, initialName = '' }: Props) {
   const [vars, setVars] = useState<Record<string, Record<string, string>>>({});
   const [search, setSearch] = useState('');
   const [installCmd, setInstallCmd] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<'curl' | 'wget' | null>(null);
   const [lastTemplate, setLastTemplate] = useState<string | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState<Record<string, boolean>>({});
 
@@ -97,20 +97,20 @@ export function AddHostWizard({ onClose, initialName = '' }: Props) {
     }
   };
 
-  const copy = async () => {
+  const copyCmd = async (cmd: string, which: 'curl' | 'wget') => {
     try {
-      await navigator.clipboard.writeText(installCmd);
+      await navigator.clipboard.writeText(cmd);
     } catch {
       const el = document.createElement('textarea');
-      el.value = installCmd;
+      el.value = cmd;
       el.style.cssText = 'position:fixed;opacity:0';
       document.body.appendChild(el);
       el.select();
       document.execCommand('copy');
       document.body.removeChild(el);
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopied(which);
+    setTimeout(() => setCopied(null), 2000);
   };
 
   return (
@@ -222,8 +222,14 @@ export function AddHostWizard({ onClose, initialName = '' }: Props) {
             <p className="wizard-sub">{t.wizard.installSubtitle}</p>
             <div className="install-box">
               <code>{installCmd}</code>
-              <button className="copy-btn" onClick={copy}>
-                {copied ? t.wizard.copied : t.wizard.copy}
+              <button className="copy-btn" onClick={() => copyCmd(installCmd, 'curl')}>
+                {copied === 'curl' ? t.wizard.copied : t.wizard.copy}
+              </button>
+            </div>
+            <div className="install-box install-box--alt">
+              <code>{installCmd.replace("curl -fsSL '", "wget -qO- '")}</code>
+              <button className="copy-btn" onClick={() => copyCmd(installCmd.replace("curl -fsSL '", "wget -qO- '"), 'wget')}>
+                {copied === 'wget' ? t.wizard.copied : t.wizard.copy}
               </button>
             </div>
             <p className="wizard-hint">{t.wizard.agentHint}</p>

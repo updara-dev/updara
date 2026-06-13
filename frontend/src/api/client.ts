@@ -3,7 +3,19 @@ import type { HostStatus, HostDetail, Command } from '../types';
 const BASE = import.meta.env.VITE_SERVER_URL ?? '';
 
 async function request<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, opts);
+  const token = localStorage.getItem('updara_token') ?? '';
+  const res = await fetch(`${BASE}${path}`, {
+    ...opts,
+    headers: {
+      ...opts?.headers,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (res.status === 401) {
+    localStorage.removeItem('updara_token');
+    window.location.reload();
+    throw new Error('Unauthorized');
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -17,6 +29,8 @@ export interface ConnectorMeta {
   display_name: string;
   category: string;
   vars: { name: string; description: string; required: boolean; default: string }[];
+  has_update: boolean;
+  hint?: string;
 }
 
 export const fetchConnectors = () =>
@@ -120,9 +134,11 @@ export const syncAgent = (hostname: string) =>
     method: 'POST',
   });
 
-export const installConnector = (hostname: string, connector: string) =>
+export const installConnector = (hostname: string, connector: string, vars?: Record<string, string>) =>
   request<Command>(`/api/v1/hosts/${encodeURIComponent(hostname)}/connectors/${encodeURIComponent(connector)}/install`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vars: vars ?? {} }),
   });
 
 export interface NotificationSettings {
@@ -132,6 +148,19 @@ export interface NotificationSettings {
   telegram_token: string;
   telegram_chat_id: string;
   telegram_enabled: boolean;
+  email_enabled: boolean;
+  email_host: string;
+  email_port: string;
+  email_username: string;
+  email_password: string;
+  email_from: string;
+  email_to: string;
+  email_tls: string;
+  digest_enabled: boolean;
+  digest_frequency: string;
+  digest_weekday: number;
+  digest_day: number;
+  digest_time: string;
   cooldown_days: number;
   min_count: number;
   batch_schedule: string;
@@ -152,6 +181,9 @@ export const saveNotificationSettings = (s: NotificationSettings) =>
 
 export const testNotification = () =>
   request<void>('/api/v1/settings/notifications/test', { method: 'POST' });
+
+export const testDigest = () =>
+  request<void>('/api/v1/settings/notifications/test-digest', { method: 'POST' });
 
 export interface HostStatSummary {
   hostname: string;

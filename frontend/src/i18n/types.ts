@@ -122,6 +122,33 @@ export interface Translations {
     scheduleHint: string;
     showLtsUpgrades: string;
     showLtsUpgradesHint: string;
+    emailSection: string;
+    emailHint: string;
+    emailHost: string;
+    emailPort: string;
+    emailTLS: string;
+    emailTLSStarttls: string;
+    emailTLSSsl: string;
+    emailTLSNone: string;
+    emailUsername: string;
+    emailPassword: string;
+    emailFrom: string;
+    emailTo: string;
+    digestSection: string;
+    digestHint: string;
+    digestFrequency: string;
+    digestFreqDaily: string;
+    digestFreqWeekly: string;
+    digestFreqMonthly: string;
+    digestWeekday: string;
+    digestWeekdays: string[];
+    digestDay: string;
+    digestDayHint: string;
+    digestTime: string;
+    testDigestBtn: string;
+    testDigestSending: string;
+    testDigestOk: string;
+    testDigestError: (e: string) => string;
   };
   stats: {
     title: string;
@@ -142,6 +169,14 @@ export interface Translations {
     statusFailed: string;
     statusPending: string;
     statusRunning: string;
+  };
+  login: {
+    tokenPlaceholder: string;
+    submit: string;
+    verifying: string;
+    invalidToken: string;
+    connectionError: string;
+    logout: string;
   };
   connectors: {
     title: string;

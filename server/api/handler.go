@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"sort"
@@ -19,14 +20,16 @@ type Handler struct {
 	connectorsDir string
 	binariesDir   string
 	publicURL     string
+	authToken     string
 }
 
-func NewHandler(s *store.Store, connectorsDir, binariesDir, publicURL string) *Handler {
+func NewHandler(s *store.Store, connectorsDir, binariesDir, publicURL, authToken string) *Handler {
 	return &Handler{
 		store:         s,
 		connectorsDir: connectorsDir,
 		binariesDir:   binariesDir,
 		publicURL:     publicURL,
+		authToken:     authToken,
 	}
 }
 
@@ -86,6 +89,7 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/settings/notifications", h.getNotificationSettings)
 	mux.HandleFunc("PUT /api/v1/settings/notifications", h.saveNotificationSettings)
 	mux.HandleFunc("POST /api/v1/settings/notifications/test", h.testNotification)
+	mux.HandleFunc("POST /api/v1/settings/notifications/test-digest", h.testDigest)
 
 	// Statistics
 	mux.HandleFunc("GET /api/v1/stats", h.globalStats)
@@ -93,7 +97,44 @@ func (h *Handler) Router() http.Handler {
 
 	mux.HandleFunc("GET /healthz", h.healthz)
 
-	return cors(mux)
+	return cors(h.authMiddleware(mux))
+}
+
+func (h *Handler) authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions || h.isPublicPath(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer "+h.authToken {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (h *Handler) isPublicPath(r *http.Request) bool {
+	p := r.URL.Path
+	switch {
+	case r.Method == "POST" && p == "/api/v1/report":
+		return true
+	case r.Method == "GET" && strings.HasSuffix(p, "/commands/pending"):
+		return true
+	case r.Method == "POST" && strings.HasPrefix(p, "/api/v1/commands/") && strings.HasSuffix(p, "/result"):
+		return true
+	case r.Method == "GET" && strings.HasPrefix(p, "/api/v1/provisions/") && strings.HasSuffix(p, "/config"):
+		return true
+	case r.Method == "GET" && p == "/install":
+		return true
+	case r.Method == "GET" && strings.HasPrefix(p, "/api/v1/agent/binary/"):
+		return true
+	case r.Method == "GET" && strings.HasPrefix(p, "/api/v1/connectors/") && strings.HasSuffix(p, "/yaml"):
+		return true
+	case r.Method == "GET" && p == "/healthz":
+		return true
+	}
+	return false
 }
 
 func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
@@ -109,9 +150,13 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If agent reports with a token, claim the provision (clears any tombstone)
+	// If agent reports with a token, use the provision's canonical hostname.
+	// This corrects truncated hostnames caused by unquoted systemd env vars
+	// (e.g. agent reports "203" but provision says "203 PiHole").
 	if req.Token != "" {
-		h.store.ClaimProvision(req.Token, req.Hostname)
+		if canonical := h.store.ClaimProvision(req.Token, req.Hostname); canonical != "" {
+			req.Hostname = canonical
+		}
 	}
 
 	cfg := h.loadNotificationSettings()
@@ -168,12 +213,20 @@ func (h *Handler) StartNotificationScheduler() {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		var lastFired time.Time
+		var lastDigestFired time.Time
 		for now := range ticker.C {
 			cfg := h.loadNotificationSettings()
+			nowTrunc := now.Truncate(time.Minute)
+
+			// Digest runs independently of batch schedule
+			if !nowTrunc.Equal(lastDigestFired) && h.shouldFireDigest(cfg, now) {
+				lastDigestFired = nowTrunc
+				go h.sendDigest(cfg) //nolint:errcheck
+			}
+
 			if cfg.BatchSchedule == "immediate" {
 				continue
 			}
-			nowTrunc := now.Truncate(time.Minute)
 			if nowTrunc.Equal(lastFired) {
 				continue
 			}
@@ -235,6 +288,111 @@ func (h *Handler) flushNotificationQueue(cfg notificationSettings) {
 	notify.SendBatch(notifyCfg, batch)
 }
 
+func (h *Handler) shouldFireDigest(cfg notificationSettings, now time.Time) bool {
+	if !cfg.DigestEnabled || !cfg.EmailEnabled || cfg.EmailHost == "" || cfg.EmailTo == "" {
+		return false
+	}
+	hr, min := parseHHMM(cfg.DigestTime)
+	if now.Hour() != hr || now.Minute() != min {
+		return false
+	}
+	switch cfg.DigestFrequency {
+	case "daily":
+		return true
+	case "weekly":
+		wd := int(now.Weekday()) // 0=Sun … 6=Sat
+		target := cfg.DigestWeekday % 7 // 1=Mon…6=Sat, 7→0=Sun
+		return wd == target
+	default: // monthly
+		day := cfg.DigestDay
+		if day < 1 || day > 28 {
+			day = 1
+		}
+		return now.Day() == day
+	}
+}
+
+func (h *Handler) sendDigest(cfg notificationSettings) error {
+	hosts := h.store.DigestSummary()
+	now := time.Now()
+
+	var totalUpdates, totalErrors int
+	var updateLines, errorLines, hostLines []string
+
+	for _, host := range hosts {
+		name := host.DisplayName
+		if name == "" {
+			name = host.Hostname
+		}
+		totalUpdates += len(host.Updates)
+		totalErrors += len(host.Errors)
+
+		for _, u := range host.Updates {
+			since := ""
+			if !u.Since.IsZero() {
+				days := int(now.Sub(u.Since).Hours() / 24)
+				if days == 1 {
+					since = " (seit 1 Tag)"
+				} else if days > 1 {
+					since = fmt.Sprintf(" (seit %d Tagen)", days)
+				}
+			}
+			updateLines = append(updateLines, fmt.Sprintf("  • %s — %s%s", name, u.Name, since))
+		}
+		for _, e := range host.Errors {
+			errorLines = append(errorLines, fmt.Sprintf("  • %s — %s", name, e))
+		}
+
+		age := now.Sub(host.LastSeen)
+		var ageStr string
+		switch {
+		case age < time.Minute:
+			ageStr = fmt.Sprintf("%ds", int(age.Seconds()))
+		case age < time.Hour:
+			ageStr = fmt.Sprintf("%dm", int(age.Minutes()))
+		case age < 24*time.Hour:
+			ageStr = fmt.Sprintf("%dh", int(age.Hours()))
+		default:
+			ageStr = fmt.Sprintf("%dd", int(age.Hours()/24))
+		}
+		icon := "✅"
+		if len(host.Errors) > 0 {
+			icon = "❌"
+		} else if len(host.Updates) > 0 {
+			icon = "⚠️"
+		}
+		hostLines = append(hostLines, fmt.Sprintf("%s %-28s %s  (last seen %s ago)", icon, name, host.IPAddress, ageStr))
+	}
+
+	subject := fmt.Sprintf("Updara Digest — %s %d", now.Month(), now.Year())
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "Updara Digest — %s %d\n", now.Month(), now.Year())
+	sb.WriteString(strings.Repeat("=", 44) + "\n\n")
+	fmt.Fprintf(&sb, "Monitored:       %d hosts\n", len(hosts))
+	fmt.Fprintf(&sb, "Pending updates: %d\n", totalUpdates)
+	fmt.Fprintf(&sb, "Errors:          %d\n", totalErrors)
+
+	if len(updateLines) > 0 {
+		sb.WriteString("\nUPDATES NEEDED\n" + strings.Repeat("-", 20) + "\n")
+		sb.WriteString(strings.Join(updateLines, "\n") + "\n")
+	}
+	if len(errorLines) > 0 {
+		sb.WriteString("\nERRORS\n" + strings.Repeat("-", 20) + "\n")
+		sb.WriteString(strings.Join(errorLines, "\n") + "\n")
+	}
+	sb.WriteString("\nALL HOSTS\n" + strings.Repeat("-", 20) + "\n")
+	sb.WriteString(strings.Join(hostLines, "\n") + "\n")
+
+	notifyCfg := h.toNotifyConfig(cfg)
+	if err := notify.SendDigest(notifyCfg, subject, sb.String()); err != nil {
+		log.Printf("digest email failed: %v", err)
+		return err
+	}
+	log.Printf("digest email sent to %s", cfg.EmailTo)
+	return nil
+}
+
 func (h *Handler) renameHost(w http.ResponseWriter, r *http.Request) {
 	hostname := r.PathValue("hostname")
 	var body struct {
@@ -294,7 +452,7 @@ func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

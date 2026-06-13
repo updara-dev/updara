@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { HostStatus } from '../types';
 import { HostCard } from '../components/HostCard';
-import { triggerUpdate } from '../api/client';
+import { triggerUpdate, fetchConnectors } from '../api/client';
+import type { ConnectorMeta } from '../api/client';
 import { useT } from '../i18n';
 
 interface Props {
@@ -22,17 +23,19 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(s / 86400)}d`;
 }
 
-function HostListRow({ status, selected, onToggleSelect, onClick }: {
+function HostListRow({ status, selected, onToggleSelect, onClick, connectorMeta }: {
   status: HostStatus;
   selected: Set<string>;
   onToggleSelect: (hostname: string, connector: string) => void;
   onClick: () => void;
+  connectorMeta: ConnectorMeta[];
 }) {
   const { host, results } = status;
-  const updatable = (results ?? []).filter(r => r.update_available && !r.ignored);
+  const allUpdates = (results ?? []).filter(r => r.update_available && !r.ignored);
+  const updatable = allUpdates.filter(r => connectorMeta.find(m => m.name === r.connector)?.has_update !== false);
   const errors = (results ?? []).filter(r => r.error && !r.ignored);
   const allChecked = updatable.length > 0 && updatable.every(r => selected.has(updateKey(host.hostname, r.connector)));
-  const color = errors.length > 0 ? 'var(--color-critical)' : updatable.length > 0 ? 'var(--color-warning)' : 'var(--color-ok)';
+  const color = errors.length > 0 ? 'var(--color-critical)' : allUpdates.length > 0 ? 'var(--color-warning)' : 'var(--color-ok)';
   const secs = (Date.now() - new Date(host.last_seen).getTime()) / 1000;
   const agentStatus = secs < 300 ? 'online' : secs < 3600 ? 'stale' : 'offline';
 
@@ -53,8 +56,8 @@ function HostListRow({ status, selected, onToggleSelect, onClick }: {
       {host.ip_address && <span className="host-list-row__ip">{host.ip_address}</span>}
       <div className="host-list-row__badges">
         {errors.length > 0 && <span className="host-list-row__badge host-list-row__badge--error">✕ {errors.length}</span>}
-        {updatable.length > 0 && <span className="host-list-row__badge host-list-row__badge--update">⚠ {updatable.length}</span>}
-        {updatable.length === 0 && errors.length === 0 && <span className="host-list-row__badge host-list-row__badge--ok">✓</span>}
+        {allUpdates.length > 0 && <span className="host-list-row__badge host-list-row__badge--update">⚠ {allUpdates.length}</span>}
+        {allUpdates.length === 0 && errors.length === 0 && <span className="host-list-row__badge host-list-row__badge--ok">✓</span>}
       </div>
       <span className={`host-list-row__agent host-list-row__agent--${agentStatus}`}>{agentStatus}</span>
       <span className="host-list-row__time">{timeAgo(host.last_seen)}</span>
@@ -64,6 +67,7 @@ function HostListRow({ status, selected, onToggleSelect, onClick }: {
 
 export function Dashboard({ hosts, loading, error, onSelectHost, onAddHost }: Props) {
   const { t } = useT();
+  const [connectorMeta, setConnectorMeta] = useState<ConnectorMeta[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [triggered, setTriggered] = useState<number | null>(null);
   const [view, setView] = useState<'grid' | 'list'>(() =>
@@ -71,6 +75,8 @@ export function Dashboard({ hosts, loading, error, onSelectHost, onAddHost }: Pr
   );
   const [filterText, setFilterText] = useState('');
   const [filterStatus, setFilterStatus] = useState<Set<'updates' | 'errors'>>(new Set());
+
+  useEffect(() => { fetchConnectors().then(setConnectorMeta).catch(() => {}); }, []);
 
   const switchView = (v: 'grid' | 'list') => {
     setView(v);
@@ -88,9 +94,9 @@ export function Dashboard({ hosts, loading, error, onSelectHost, onAddHost }: Pr
   const allUpdatable = useMemo(() =>
     hosts.flatMap(h =>
       (h.results ?? [])
-        .filter(r => r.update_available && !r.ignored)
+        .filter(r => r.update_available && !r.ignored && connectorMeta.find(m => m.name === r.connector)?.has_update !== false)
         .map(r => updateKey(h.host.hostname, r.connector))
-    ), [hosts]);
+    ), [hosts, connectorMeta]);
 
   const allSelected = allUpdatable.length > 0 && allUpdatable.every(k => selected.has(k));
 
@@ -199,6 +205,7 @@ export function Dashboard({ hosts, loading, error, onSelectHost, onAddHost }: Pr
               selected={selected}
               onToggleSelect={toggleSelect}
               onClick={() => onSelectHost(h.host.hostname)}
+              connectorMeta={connectorMeta}
             />
           ))}
         </div>
@@ -211,6 +218,7 @@ export function Dashboard({ hosts, loading, error, onSelectHost, onAddHost }: Pr
               selected={selected}
               onToggleSelect={toggleSelect}
               onClick={() => onSelectHost(h.host.hostname)}
+              connectorMeta={connectorMeta}
             />
           ))}
         </div>

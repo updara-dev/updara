@@ -1,4 +1,5 @@
 import type { HostStatus } from '../types';
+import type { ConnectorMeta } from '../api/client';
 import { CheckRow } from './CheckRow';
 import { useT } from '../i18n';
 
@@ -7,6 +8,7 @@ interface Props {
   selected: Set<string>;
   onToggleSelect: (hostname: string, connector: string) => void;
   onClick?: () => void;
+  connectorMeta?: ConnectorMeta[];
 }
 
 function cardColor(status: HostStatus): string {
@@ -16,7 +18,7 @@ function cardColor(status: HostStatus): string {
   return 'var(--color-ok)';
 }
 
-export function HostCard({ status, selected, onToggleSelect, onClick }: Props) {
+export function HostCard({ status, selected, onToggleSelect, onClick, connectorMeta }: Props) {
   const { t } = useT();
   const { host, results } = status;
   const color = cardColor(status);
@@ -58,6 +60,8 @@ export function HostCard({ status, selected, onToggleSelect, onClick }: Props) {
               hostname={host.hostname}
               isSelected={selected.has(`${host.hostname}::${r.connector}`)}
               onToggleSelect={() => onToggleSelect(host.hostname, r.connector)}
+              hasUpdate={connectorMeta?.find(m => m.name === r.connector)?.has_update}
+              hint={connectorMeta?.find(m => m.name === r.connector)?.hint}
             />
           ))}
         </div>

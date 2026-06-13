@@ -123,6 +123,7 @@ func New(path string) *Store {
 		`ALTER TABLE hosts ADD COLUMN ip_address TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE provisions ADD COLUMN server_url TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE hosts ADD COLUMN display_name TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE results ADD COLUMN update_since TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, m := range migrations {
 		db.Exec(m) // ignore errors (column may already exist)
@@ -168,6 +169,21 @@ func (s *Store) Upsert(req model.ReportRequest) {
 	}
 
 	disabled := s.fetchDisabled(req.Hostname)
+
+	// Preserve update_since timestamps for connectors that remain outdated
+	sinceMap := map[string]string{}
+	rows, _ := s.db.Query(
+		`SELECT connector, update_since FROM results WHERE host_id=? AND update_available=1 AND update_since!=''`,
+		req.Hostname)
+	if rows != nil {
+		for rows.Next() {
+			var conn, since string
+			rows.Scan(&conn, &since)
+			sinceMap[conn] = since
+		}
+		rows.Close()
+	}
+
 	s.db.Exec(`DELETE FROM results WHERE host_id = ?`, req.Hostname)
 	for _, r := range req.Results {
 		if disabled[r.Connector] {
@@ -178,12 +194,19 @@ func (s *Store) Upsert(req model.ReportRequest) {
 		if r.UpdateAvailable {
 			upd = 1
 		}
+		since := ""
+		if upd == 1 {
+			since = sinceMap[r.Connector]
+			if since == "" {
+				since = now
+			}
+		}
 		s.db.Exec(`
 			INSERT INTO results
-			  (host_id,connector,display_name,category,values_json,update_available,changelog,error,checked_at)
-			VALUES (?,?,?,?,?,?,?,?,?)
+			  (host_id,connector,display_name,category,values_json,update_available,changelog,error,checked_at,update_since)
+			VALUES (?,?,?,?,?,?,?,?,?,?)
 		`, req.Hostname, r.Connector, r.DisplayName, r.Category, string(valJSON),
-			upd, r.Changelog, r.Error, r.CheckedAt.UTC().Format(time.RFC3339Nano))
+			upd, r.Changelog, r.Error, r.CheckedAt.UTC().Format(time.RFC3339Nano), since)
 	}
 }
 
@@ -424,12 +447,21 @@ func (s *Store) ProvisionByHost(hostname string) (*model.Provision, bool) {
 	return &p, true
 }
 
-func (s *Store) ClaimProvision(token, hostname string) {
+// ClaimProvision marks the provision as claimed and returns the provision's
+// canonical hostname (provision.name). This is used to override the hostname
+// an agent reports when its systemd env var got truncated due to spaces.
+func (s *Store) ClaimProvision(token, hostname string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	var canonical string
+	s.db.QueryRow(`SELECT name FROM provisions WHERE token=?`, token).Scan(&canonical)
 	s.db.Exec(`UPDATE provisions SET claimed_by=? WHERE token=?`, hostname, token)
-	// Re-provisioning the same hostname clears any tombstone from a previous delete
-	s.db.Exec(`DELETE FROM deleted_hosts WHERE host_id=?`, hostname)
+	if canonical != "" {
+		s.db.Exec(`DELETE FROM deleted_hosts WHERE host_id=?`, canonical)
+	} else {
+		s.db.Exec(`DELETE FROM deleted_hosts WHERE host_id=?`, hostname)
+	}
+	return canonical
 }
 
 func (s *Store) AllProvisions() []model.Provision {
@@ -538,6 +570,12 @@ func (s *Store) DeleteHostConnector(hostID, connector string) {
 	s.db.Exec(`DELETE FROM ignored_items WHERE host_id=? AND connector=?`, hostID, connector)
 }
 
+func (s *Store) EnableConnector(hostID, connector string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.db.Exec(`DELETE FROM disabled_connectors WHERE host_id=? AND connector=?`, hostID, connector)
+}
+
 func (s *Store) DeleteHost(hostname string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -614,6 +652,10 @@ func (s *Store) NewUpdates(hostname string, cooldownDays int) []UpdateEntry {
 		SELECT r.connector, r.display_name, COALESCE(r.values_json,'{}')
 		FROM results r
 		WHERE r.host_id=? AND r.update_available=1
+		  AND NOT EXISTS (
+		      SELECT 1 FROM ignored_items i
+		      WHERE i.host_id=r.host_id AND i.connector=r.connector AND i.item=''
+		  )
 		  AND (
 		    NOT EXISTS (
 		        SELECT 1 FROM notified_updates n
@@ -785,10 +827,22 @@ func (s *Store) EnqueueNotifications(hostname string, entries []UpdateEntry) {
 }
 
 // FlushQueue returns all queued notifications grouped by hostname, then clears the queue.
+// Only entries that are still update_available and not ignored are returned.
 func (s *Store) FlushQueue() map[string][]UpdateEntry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT hostname, connector, display_name, values_json FROM notification_queue ORDER BY hostname, queued_at`)
+	rows, err := s.db.Query(`
+		SELECT q.hostname, q.connector, q.display_name, q.values_json
+		FROM notification_queue q
+		JOIN hosts h ON h.hostname = q.hostname
+		JOIN results r ON r.host_id = h.id AND r.connector = q.connector
+		WHERE r.update_available = 1
+		  AND NOT EXISTS (
+		      SELECT 1 FROM ignored_items i
+		      WHERE i.host_id = h.id AND i.connector = q.connector AND i.item = ''
+		  )
+		ORDER BY q.hostname, q.queued_at
+	`)
 	if err != nil {
 		return nil
 	}
@@ -800,8 +854,85 @@ func (s *Store) FlushQueue() map[string][]UpdateEntry {
 		result[hostname] = append(result[hostname], e)
 	}
 	rows.Close()
-	if len(result) > 0 {
-		s.db.Exec(`DELETE FROM notification_queue`)
-	}
+	s.db.Exec(`DELETE FROM notification_queue`)
 	return result
+}
+
+type DigestUpdate struct {
+	Name  string
+	Since time.Time // zero if unknown
+}
+
+// DigestHost holds per-host summary data for the digest email.
+type DigestHost struct {
+	Hostname    string
+	DisplayName string
+	IPAddress   string
+	LastSeen    time.Time
+	Updates     []DigestUpdate
+	Errors      []string
+}
+
+func (s *Store) DigestSummary() []DigestHost {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows, err := s.db.Query(`
+		SELECT h.hostname, h.display_name, h.ip_address, h.last_seen,
+		       r.display_name, r.update_available, r.error, r.ignored, r.update_since
+		FROM hosts h
+		LEFT JOIN (
+			SELECT r2.host_id, r2.connector, r2.display_name,
+			       r2.update_available, r2.error, r2.update_since,
+			       CASE WHEN ig.host_id IS NOT NULL THEN 1 ELSE 0 END as ignored
+			FROM results r2
+			LEFT JOIN ignored_items ig ON ig.host_id = r2.host_id
+			    AND ig.connector = r2.connector AND ig.item = ''
+		) r ON r.host_id = h.id
+		ORDER BY h.hostname, r.connector
+	`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+
+	hostMap := map[string]*DigestHost{}
+	var order []string
+	for rows.Next() {
+		var hostname, displayName, ip, lastSeen string
+		var connName, errStr, updateSince sql.NullString
+		var updateAvail, ignored sql.NullInt64
+		if err := rows.Scan(&hostname, &displayName, &ip, &lastSeen,
+			&connName, &updateAvail, &errStr, &ignored, &updateSince); err != nil {
+			continue
+		}
+		if _, ok := hostMap[hostname]; !ok {
+			t, _ := time.Parse(time.RFC3339Nano, lastSeen)
+			hostMap[hostname] = &DigestHost{
+				Hostname: hostname, DisplayName: displayName,
+				IPAddress: ip, LastSeen: t,
+			}
+			order = append(order, hostname)
+		}
+		h := hostMap[hostname]
+		if !connName.Valid || ignored.Int64 == 1 {
+			continue
+		}
+		name := connName.String
+		if updateAvail.Valid && updateAvail.Int64 == 1 {
+			var since time.Time
+			if updateSince.Valid && updateSince.String != "" {
+				since, _ = time.Parse(time.RFC3339Nano, updateSince.String)
+			}
+			h.Updates = append(h.Updates, DigestUpdate{Name: name, Since: since})
+		}
+		if errStr.Valid && errStr.String != "" {
+			h.Errors = append(h.Errors, name)
+		}
+	}
+
+	out := make([]DigestHost, 0, len(order))
+	for _, hn := range order {
+		out = append(out, *hostMap[hn])
+	}
+	return out
 }

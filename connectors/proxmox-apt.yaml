@@ -1,0 +1,16 @@
+name: proxmox-apt
+display_name: APT Packages (Proxmox)
+icon: debian.svg
+category: system
+docs: https://pve.proxmox.com/wiki/Package_Repositories
+hint: "Update via Proxmox UI → Node → Updates"
+
+vars: []
+
+check:
+  type: shell
+  command: "apt-get update -qq 2>/dev/null; apt list --upgradable 2>/dev/null | tail -n +2 | wc -l"
+  parse:
+    count: "$stdout"
+  update_available: "count > 0"
+  interval: 3600

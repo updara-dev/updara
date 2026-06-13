@@ -1,0 +1,76 @@
+name: immich-docker
+display_name: Immich (Docker)
+category: application
+docs: https://immich.app/docs/overview/changelog
+
+vars:
+  - name: IMMICH_URL
+    description: "Immich Server URL (default: http://localhost:2283)"
+    required: false
+    default: "http://localhost:2283"
+
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, json, sys, os
+    try:
+        from urllib.request import urlopen, Request
+    except ImportError:
+        print("error=urllib not available")
+        sys.exit(0)
+
+    url = os.environ.get('IMMICH_URL', 'http://localhost:2283').rstrip('/')
+
+    try:
+        data = json.loads(urlopen(f'{url}/api/server/version', timeout=10).read())
+        current = f"v{data['major']}.{data['minor']}.{data['patch']}"
+    except Exception as e:
+        print(f"error=Immich API: {e}")
+        sys.exit(0)
+
+    try:
+        req = Request('https://api.github.com/repos/immich-app/immich/releases/latest',
+                      headers={'User-Agent': 'updara-agent/1.0'})
+        latest = json.loads(urlopen(req, timeout=10).read())['tag_name']
+    except Exception as e:
+        print(f"current={current}")
+        print(f"error=GitHub API: {e}")
+        sys.exit(0)
+
+    compose = subprocess.run(
+        ['docker', 'inspect', '--format',
+         '{{index .Config.Labels "com.docker.compose.project.working_dir"}}',
+         'immich_server'],
+        capture_output=True, text=True
+    ).stdout.strip()
+    if compose:
+        print(f"compose_dir={compose}")
+
+    print(f"current={current}")
+    print(f"latest={latest}")
+    PYEOF
+  parse:
+    current:     "$current"
+    latest:      "$latest"
+    compose_dir: "$compose_dir"
+  update_available: "current != latest"
+  interval: 3600
+
+update:
+  type: shell
+  command: |
+    COMPOSE_DIR=$(docker inspect --format \
+      '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' \
+      immich_server 2>/dev/null)
+    if [ -z "$COMPOSE_DIR" ]; then
+      echo "Error: immich_server container not found"
+      exit 1
+    fi
+    echo "[Updara] Updating Immich in $COMPOSE_DIR..."
+    cd "$COMPOSE_DIR" && docker compose pull && docker compose up -d --remove-orphans
+    echo "[Updara] Done"
+  requires_confirmation: true
+
+notifications:
+  changelog: "https://github.com/immich-app/immich/releases"

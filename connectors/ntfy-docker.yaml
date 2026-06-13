@@ -1,0 +1,82 @@
+name: ntfy-docker
+display_name: ntfy (Docker)
+category: application
+docs: https://github.com/binwiederhier/ntfy/releases
+
+vars:
+  - name: NTFY_CONTAINER
+    description: "Container-Name (default: ntfy)"
+    required: false
+    default: "ntfy"
+
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, json, sys, os
+    try:
+        from urllib.request import urlopen, Request
+    except ImportError:
+        print("error=urllib not available")
+        sys.exit(0)
+
+    container = os.environ.get('NTFY_CONTAINER', 'ntfy').strip() or 'ntfy'
+
+    ver = subprocess.run(
+        ['docker', 'exec', container, 'ntfy', '--version'],
+        capture_output=True, text=True, timeout=10
+    )
+    if ver.returncode != 0:
+        print(f"error=container '{container}' not found or ntfy not running")
+        sys.exit(0)
+
+    # output: "ntfy version 2.24.0"
+    parts = ver.stdout.strip().split()
+    current = f"v{parts[-1]}" if parts else 'unknown'
+
+    compose = subprocess.run(
+        ['docker', 'inspect', '--format',
+         '{{index .Config.Labels "com.docker.compose.project.working_dir"}}',
+         container],
+        capture_output=True, text=True
+    ).stdout.strip()
+    if compose:
+        print(f"compose_dir={compose}")
+
+    try:
+        req = Request('https://api.github.com/repos/binwiederhier/ntfy/releases/latest',
+                      headers={'User-Agent': 'updara-agent/1.0'})
+        latest = json.loads(urlopen(req, timeout=10).read())['tag_name']
+    except Exception as e:
+        print(f"current={current}")
+        print(f"error=GitHub API: {e}")
+        sys.exit(0)
+
+    print(f"current={current}")
+    print(f"latest={latest}")
+    PYEOF
+  parse:
+    current:     "$current"
+    latest:      "$latest"
+    compose_dir: "$compose_dir"
+  update_available: "current != latest"
+  interval: 3600
+
+update:
+  type: shell
+  command: |
+    CONTAINER=${NTFY_CONTAINER:-ntfy}
+    COMPOSE_DIR=$(docker inspect --format \
+      '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' \
+      "$CONTAINER" 2>/dev/null)
+    if [ -z "$COMPOSE_DIR" ]; then
+      echo "Error: container '$CONTAINER' not found"
+      exit 1
+    fi
+    echo "[Updara] Updating ntfy in $COMPOSE_DIR..."
+    cd "$COMPOSE_DIR" && docker compose pull && docker compose up -d
+    echo "[Updara] Done"
+  requires_confirmation: true
+
+notifications:
+  changelog: "https://github.com/binwiederhier/ntfy/releases"

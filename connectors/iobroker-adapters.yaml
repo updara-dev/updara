@@ -1,0 +1,32 @@
+name: iobroker-adapters
+display_name: ioBroker Adapters
+category: application
+docs: https://www.iobroker.net/#en/adapters
+hint: "Update via ioBroker Admin UI → Adapters"
+
+vars: []
+
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, sys
+
+    result = subprocess.run(
+        ['iobroker', 'update'],
+        capture_output=True, text=True, timeout=120
+    )
+    if result.returncode != 0:
+        print("error=iobroker update failed")
+        sys.exit(0)
+
+    count = sum(1 for line in result.stdout.splitlines() if '[Updatable]' in line)
+    print(f"updates={count}")
+    PYEOF
+  parse:
+    updates: "$updates"
+  update_available: "updates > 0"
+  interval: 21600
+
+notifications:
+  changelog: "https://www.iobroker.net/#en/adapters"

@@ -8,13 +8,15 @@ interface Props {
   hostname: string;
   isSelected?: boolean;
   onToggleSelect?: () => void;
+  hasUpdate?: boolean;
+  hint?: string;
 }
 
 function stripAnsi(str: string): string {
   return str.replace(/\x1b\[[0-9;?]*[a-zA-Z]|\r/g, '').trim();
 }
 
-export function CheckRow({ result, hostname, isSelected, onToggleSelect }: Props) {
+export function CheckRow({ result, hostname, isSelected, onToggleSelect, hasUpdate, hint }: Props) {
   const { t } = useT();
   const [cmd, setCmd] = useState<Command | null>(null);
   const [showOutput, setShowOutput] = useState(false);
@@ -62,6 +64,7 @@ export function CheckRow({ result, hostname, isSelected, onToggleSelect }: Props
   const icon  = state === 'ignored' ? '🔕' : state === 'error' ? '❌' : state === 'update' ? '⚠️' : '✅';
 
   const valueLabel = Object.entries(result.values ?? {})
+    .filter(([k]) => k !== 'needs_update')
     .map(([k, v]) => `${k}: ${v}`)
     .join(' · ');
 
@@ -83,7 +86,7 @@ export function CheckRow({ result, hostname, isSelected, onToggleSelect }: Props
       );
   };
 
-  const showCheckbox = result.update_available && !result.ignored && !cmd && !!onToggleSelect;
+  const showCheckbox = result.update_available && !result.ignored && !cmd && !!onToggleSelect && hasUpdate !== false;
 
   return (
     <div className="check-row-wrapper">
@@ -109,13 +112,16 @@ export function CheckRow({ result, hostname, isSelected, onToggleSelect }: Props
           {!result.ignored && !result.error && valueLabel && (
             <span className="check-row__detail">{valueLabel}</span>
           )}
+          {result.update_available && !cmd && hasUpdate === false && hint && (
+            <span className="check-row__detail check-row__detail--muted">{hint}</span>
+          )}
         </div>
         <div className="check-row__actions">
           {statusBadge()}
-          {result.update_available && !cmd && (
+          {result.update_available && !cmd && hasUpdate !== false && (
             <button className="update-btn" onClick={handleUpdate}>{t.checkRow.update}</button>
           )}
-          {result.update_available && result.changelog && !cmd && (
+          {result.update_available && result.changelog && !cmd && hasUpdate !== false && (
             <a className="check-row__changelog" href={result.changelog}
                target="_blank" rel="noopener noreferrer">
               {t.checkRow.changelog}

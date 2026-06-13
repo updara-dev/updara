@@ -1,0 +1,53 @@
+name: iobroker-native
+display_name: ioBroker (Native)
+category: application
+docs: https://github.com/ioBroker/ioBroker.js-controller/releases
+hint: "Update via ioBroker Admin UI → System"
+
+vars: []
+
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, json, sys
+    try:
+        from urllib.request import urlopen, Request
+    except ImportError:
+        print("error=urllib not available")
+        sys.exit(0)
+
+    ver = subprocess.run(['iobroker', 'version'], capture_output=True, text=True, timeout=10)
+    if ver.returncode != 0:
+        print("error=iobroker command not found")
+        sys.exit(0)
+    current = f"v{ver.stdout.strip()}"
+
+    node = subprocess.run(['node', '--version'], capture_output=True, text=True, timeout=5)
+    node_ver = node.stdout.strip() if node.returncode == 0 else 'unknown'
+
+    try:
+        req = Request(
+            'https://api.github.com/repos/ioBroker/ioBroker.js-controller/releases/latest',
+            headers={'User-Agent': 'updara-agent/1.0'}
+        )
+        latest = json.loads(urlopen(req, timeout=10).read())['tag_name']
+    except Exception as e:
+        print(f"current={current}")
+        print(f"node={node_ver}")
+        print(f"error=GitHub API: {e}")
+        sys.exit(0)
+
+    print(f"current={current}")
+    print(f"latest={latest}")
+    print(f"node={node_ver}")
+    PYEOF
+  parse:
+    current: "$current"
+    latest:  "$latest"
+    node:    "$node"
+  update_available: "current != latest"
+  interval: 3600
+
+notifications:
+  changelog: "https://github.com/ioBroker/ioBroker.js-controller/releases"

@@ -1,0 +1,231 @@
+name: standalone-docker
+display_name: Standalone Docker
+category: infrastructure
+docs: https://docs.docker.com
+
+vars:
+  - name: CONTAINER_NAME
+    description: "Name des Containers — leer lassen wenn nur ein standalone Container läuft (auto-detect)"
+    required: false
+    default: ""
+  - name: DOCKER_RUN_CMD
+    description: "Optional: Vollständiger docker run Befehl — nur nötig wenn --env-file oder komplexe Config verwendet wird"
+    required: false
+    default: ""
+
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, json, sys, os
+    try:
+        from urllib.request import urlopen, Request
+    except ImportError:
+        print("count=0")
+        sys.exit(0)
+
+    def find_standalone():
+        all_containers = subprocess.run(
+            ['docker', 'ps', '--format', '{{.Names}}'],
+            capture_output=True, text=True
+        ).stdout.strip().split('\n')
+        standalone = []
+        for c in all_containers:
+            if not c:
+                continue
+            label = subprocess.run(
+                ['docker', 'inspect', '--format',
+                 '{{index .Config.Labels "com.docker.compose.project"}}', c],
+                capture_output=True, text=True
+            ).stdout.strip()
+            if not label:
+                standalone.append(c)
+        return standalone
+
+    container = os.environ.get('CONTAINER_NAME', '').strip()
+    if not container:
+        standalone = find_standalone()
+        if len(standalone) == 0:
+            print("count=0")
+            print("error=No standalone containers found")
+            sys.exit(0)
+        elif len(standalone) > 1:
+            print("count=0")
+            print(f"error=Multiple standalone containers found: {', '.join(standalone)} — set CONTAINER_NAME")
+            sys.exit(0)
+        container = standalone[0]
+
+    result = subprocess.run(
+        ['docker', 'inspect', container, '--format', '{{.Config.Image}}'],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        print("count=0")
+        print(f"error=Container '{container}' not found")
+        sys.exit(0)
+
+    image = result.stdout.strip()
+
+    if '.' in image.split('/')[0]:
+        print("count=0")
+        print(f"image={image}")
+        print("error=Non-Docker-Hub image not supported")
+        sys.exit(0)
+
+    repo, tag = (image.rsplit(':', 1) if ':' in image.split('/')[-1] else (image, 'latest'))
+    if '/' not in repo:
+        repo = 'library/' + repo
+
+    try:
+        token = json.loads(urlopen(
+            f'https://auth.docker.io/token?service=registry.docker.io&scope=repository:{repo}:pull',
+            timeout=10
+        ).read())['token']
+
+        req = Request(
+            f'https://registry-1.docker.io/v2/{repo}/manifests/{tag}',
+            headers={
+                'Authorization': f'Bearer {token}',
+                'Accept': 'application/vnd.docker.distribution.manifest.v2+json',
+            }
+        )
+        remote_digest = urlopen(req, timeout=10).headers.get('Docker-Content-Digest', '')
+
+        local = subprocess.run(
+            ['docker', 'inspect', '--format', '{{index .RepoDigests 0}}', image],
+            capture_output=True, text=True
+        ).stdout.strip()
+
+        outdated = 1 if (remote_digest and local and remote_digest not in local) else 0
+        print(f"count={outdated}")
+        print(f"image={image}")
+    except Exception as e:
+        print("count=0")
+        print(f"image={image}")
+        print(f"error={e}")
+    PYEOF
+  parse:
+    count: "$count"
+    image: "$image"
+  update_available: "count > 0"
+  interval: 3600
+
+update:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, json, sys, os, shlex, re
+
+    def find_standalone():
+        all_containers = subprocess.run(
+            ['docker', 'ps', '--format', '{{.Names}}'],
+            capture_output=True, text=True
+        ).stdout.strip().split('\n')
+        standalone = []
+        for c in all_containers:
+            if not c:
+                continue
+            label = subprocess.run(
+                ['docker', 'inspect', '--format',
+                 '{{index .Config.Labels "com.docker.compose.project"}}', c],
+                capture_output=True, text=True
+            ).stdout.strip()
+            if not label:
+                standalone.append(c)
+        return standalone
+
+    container = os.environ.get('CONTAINER_NAME', '').strip()
+    run_cmd   = os.environ.get('DOCKER_RUN_CMD', '').strip()
+
+    if not container:
+        standalone = find_standalone()
+        if len(standalone) == 0:
+            print("Error: No standalone containers found")
+            sys.exit(1)
+        elif len(standalone) > 1:
+            print(f"Error: Multiple standalone containers found: {', '.join(standalone)} — set CONTAINER_NAME")
+            sys.exit(1)
+        container = standalone[0]
+
+    image_result = subprocess.run(
+        ['docker', 'inspect', container, '--format', '{{.Config.Image}}'],
+        capture_output=True, text=True
+    )
+    if image_result.returncode != 0:
+        print(f"Error: Container '{container}' not found")
+        sys.exit(1)
+
+    image = image_result.stdout.strip()
+
+    print(f"[Updara] Pulling {image}...")
+    if subprocess.run(['docker', 'pull', image]).returncode != 0:
+        print("Error: docker pull failed")
+        sys.exit(1)
+
+    if not run_cmd:
+        inspect_result = subprocess.run(['docker', 'inspect', container], capture_output=True, text=True)
+        info = json.loads(inspect_result.stdout)[0]
+        cfg  = info['Config']
+        hcfg = info['HostConfig']
+
+        args = ['docker', 'run', '-d', f'--name={container}']
+
+        restart = hcfg.get('RestartPolicy', {})
+        rname = restart.get('Name', '')
+        if rname and rname != 'no':
+            retries = restart.get('MaximumRetryCount', 0)
+            args.append(f'--restart={rname}:{retries}' if rname == 'on-failure' and retries else f'--restart={rname}')
+
+        network = hcfg.get('NetworkMode', '')
+        if network and network not in ('default', 'bridge'):
+            args.append(f'--network={network}')
+
+        for cap in (hcfg.get('CapAdd') or []):
+            args.append(f'--cap-add={cap}')
+
+        for k, v in (hcfg.get('Sysctls') or {}).items():
+            args.append(f'--sysctl={k}={v}')
+
+        if hcfg.get('Privileged'):
+            args.append('--privileged')
+
+        for dns in (hcfg.get('Dns') or []):
+            args.append(f'--dns={dns}')
+
+        for port, bindings in (hcfg.get('PortBindings') or {}).items():
+            for b in (bindings or []):
+                host_ip   = b.get('HostIp', '')
+                host_port = b.get('HostPort', '')
+                pub = f'{host_ip}:{host_port}:{port}' if host_ip else f'{host_port}:{port}'
+                args.append(f'--publish={pub}')
+
+        for bind in (hcfg.get('Binds') or []):
+            args.append(f'--volume={bind}')
+
+        for env in (cfg.get('Env') or []):
+            args.append(f'--env={env}')
+
+        hostname = cfg.get('Hostname', '')
+        if hostname and not re.match(r'^[0-9a-f]{12}$', hostname):
+            args.append(f'--hostname={hostname}')
+
+        args.append(image)
+        run_cmd = ' '.join(shlex.quote(a) for a in args)
+        print(f"[Updara] Reconstructed: {run_cmd}")
+
+    print(f"[Updara] Stopping {container}...")
+    subprocess.run(['docker', 'stop', container])
+    subprocess.run(['docker', 'rm', container])
+
+    print(f"[Updara] Starting {container}...")
+    result = subprocess.run(run_cmd, shell=True, capture_output=True, text=True)
+    if result.returncode == 0:
+        print(f"[Updara] Done — {result.stdout.strip()}")
+    else:
+        print(f"Error: {result.stderr}")
+        sys.exit(1)
+    PYEOF
+  requires_confirmation: true
+
+notifications:
+  changelog: ""

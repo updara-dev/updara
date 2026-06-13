@@ -1,0 +1,101 @@
+name: proxmox-eol
+display_name: OS End-of-Life (Proxmox)
+category: system
+docs: https://endoflife.date
+hint: "Upgrade via Proxmox documentation"
+
+vars: []
+
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import sys, os, json, datetime
+    try:
+        from urllib.request import urlopen, Request
+        from urllib.error import URLError
+    except ImportError:
+        print("needs_update=false")
+        print("status=unknown")
+        sys.exit(0)
+
+    info = {}
+    try:
+        with open('/etc/os-release') as f:
+            for line in f:
+                line = line.strip()
+                if '=' in line:
+                    k, v = line.split('=', 1)
+                    info[k] = v.strip('"')
+    except Exception:
+        print("needs_update=false")
+        print("status=unknown")
+        sys.exit(0)
+
+    distro_id   = info.get('ID', '').lower()
+    version_id  = info.get('VERSION_ID', '').strip('"')
+    distro_name = info.get('PRETTY_NAME', f'{distro_id} {version_id}')
+
+    if not distro_id or not version_id:
+        print("status=unknown")
+        sys.exit(0)
+
+    api_id = {
+        'raspbian': 'raspberry-pi-os',
+        'centos':   'centos',
+        'rocky':    'rocky-linux',
+    }.get(distro_id, distro_id)
+
+    try:
+        today = datetime.date.today()
+        req = Request(
+            f'https://endoflife.date/api/{api_id}.json',
+            headers={'User-Agent': 'updara-agent/1.0'}
+        )
+        all_data = json.loads(urlopen(req, timeout=10).read())
+
+        ver_short = '.'.join(version_id.split('.')[:2])
+        current_data = next(
+            (v for v in all_data if str(v.get('cycle','')) in (version_id, ver_short)),
+            None
+        )
+        if current_data is None:
+            print("needs_update=false")
+            print("status=unknown")
+            print(f'distro={distro_name}')
+            sys.exit(0)
+
+        eol_raw = current_data.get('eol', False)
+        status = 'supported'
+        if eol_raw is True:
+            status = 'eol'
+            print(f'eol_date=unknown')
+        elif eol_raw is not False:
+            try:
+                eol_dt = datetime.date.fromisoformat(str(eol_raw))
+                if eol_dt < today:
+                    status = 'eol'
+                    print(f'eol_date={eol_raw}')
+                    print(f'days_eol={(today - eol_dt).days}')
+            except Exception:
+                pass
+
+        needs_update = status == 'eol'
+        print(f'needs_update={"true" if needs_update else "false"}')
+        print(f'status={status}')
+        print(f'distro={distro_name}')
+
+    except Exception:
+        print("needs_update=false")
+        print("status=unknown")
+        print(f'distro={distro_name}')
+    PYEOF
+  parse:
+    needs_update: "$needs_update"
+    status:       "$status"
+    distro:       "$distro"
+    eol_date:     "$eol_date"
+    days_eol:     "$days_eol"
+  update_available: "needs_update == true"
+  interval: 86400
+

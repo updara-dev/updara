@@ -157,12 +157,14 @@ function ContainerRow({
 function ResultRow({
   result,
   hostname,
+  meta,
   onToggleIgnore,
   onRemove,
   onCommandComplete,
 }: {
   result: CheckResult;
   hostname: string;
+  meta?: ConnectorMeta;
   onToggleIgnore: (connector: string, item: string | undefined, ignored: boolean) => Promise<void>;
   onRemove: (connector: string) => Promise<void>;
   onCommandComplete: () => void;
@@ -277,8 +279,11 @@ function ResultRow({
             {cmd && cmd.status === 'running' && <span className="cmd-status running">{t.checkRow.running}</span>}
             {cmd && cmd.status === 'done' && <span className="cmd-status done">{t.checkRow.updated}</span>}
             {cmd && cmd.status === 'failed' && <span className="cmd-status failed">{t.checkRow.failed}</span>}
-            {result.update_available && !cmd && (
+            {result.update_available && !cmd && meta?.has_update !== false && (
               <button className="update-btn" onClick={handleUpdate}>{t.checkRow.update}</button>
+            )}
+            {result.update_available && !cmd && meta?.has_update === false && meta.hint && (
+              <span className="connector-hint">{meta.hint}</span>
             )}
             <button
               className={result.ignored ? 'unignore-btn' : 'ignore-btn'}
@@ -338,16 +343,26 @@ function AddConnectorPanel({
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState('');
+  const [vars, setVars] = useState<Record<string, string>>({});
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [status, setStatus] = useState<'idle' | 'queued' | 'done' | 'error'>('idle');
   const [errMsg, setErrMsg] = useState('');
+
+  const selectedMeta = available.find(c => c.name === selected);
+
+  const handleSelect = (name: string) => {
+    setSelected(name);
+    setVars({});
+    setAdvancedOpen(false);
+  };
 
   const handleInstall = async () => {
     if (!selected) return;
     setStatus('queued');
     try {
-      await installConnector(hostname, selected);
+      await installConnector(hostname, selected, vars);
       setStatus('done');
-      setTimeout(() => { setStatus('idle'); setSelected(''); setOpen(false); onDone(); }, 3000);
+      setTimeout(() => { setStatus('idle'); setSelected(''); setVars({}); setOpen(false); onDone(); }, 3000);
     } catch (e) {
       setErrMsg(String(e));
       setStatus('error');
@@ -362,6 +377,23 @@ function AddConnectorPanel({
     );
   }
 
+  const requiredVars = selectedMeta?.vars.filter(v => v.required) ?? [];
+  const optionalVars = selectedMeta?.vars.filter(v => !v.required) ?? [];
+  const missingRequired = requiredVars.some(v => !vars[v.name]?.trim());
+
+  const renderVar = (v: { name: string; description: string; required: boolean; default: string }) => (
+    <label key={v.name} className="connector-var-row">
+      <span>{v.name}{v.required && ' *'}</span>
+      {v.description && <small>{v.description}</small>}
+      <input
+        className="wizard-input"
+        value={vars[v.name] ?? ''}
+        onChange={e => setVars(prev => ({ ...prev, [v.name]: e.target.value }))}
+        placeholder={v.default || v.name}
+      />
+    </label>
+  );
+
   return (
     <div className="add-connector-panel">
       {available.length === 0 ? (
@@ -371,17 +403,35 @@ function AddConnectorPanel({
           <select
             className="add-connector-panel__select"
             value={selected}
-            onChange={e => setSelected(e.target.value)}
+            onChange={e => handleSelect(e.target.value)}
           >
             <option value="">— Connector wählen —</option>
             {available.map(c => (
               <option key={c.name} value={c.name}>{c.display_name || c.name}</option>
             ))}
           </select>
+
+          {selectedMeta && (selectedMeta.vars ?? []).length > 0 && (
+            <div className="connector-vars">
+              {requiredVars.map(renderVar)}
+              {optionalVars.length > 0 && (
+                <>
+                  <button
+                    className="connector-vars-advanced-btn"
+                    onClick={e => { e.stopPropagation(); setAdvancedOpen(o => !o); }}
+                  >
+                    Advanced {advancedOpen ? '▲' : '▼'}
+                  </button>
+                  {advancedOpen && optionalVars.map(renderVar)}
+                </>
+              )}
+            </div>
+          )}
+
           <button
             className="btn-primary"
             onClick={handleInstall}
-            disabled={!selected || status === 'queued'}
+            disabled={!selected || status === 'queued' || missingRequired}
           >
             {status === 'queued' ? t.hostDetail.addConnectorQueued : t.hostDetail.addConnectorBtn}
           </button>
@@ -389,7 +439,7 @@ function AddConnectorPanel({
       )}
       {status === 'done' && <span className="add-connector-panel__status ok">{t.hostDetail.addConnectorDone}</span>}
       {status === 'error' && <span className="add-connector-panel__status err">{t.hostDetail.addConnectorError(errMsg)}</span>}
-      <button className="add-connector-panel__cancel" onClick={() => { setOpen(false); setStatus('idle'); }}>✕</button>
+      <button className="add-connector-panel__cancel" onClick={() => { setOpen(false); setStatus('idle'); setSelected(''); setVars({}); }}>✕</button>
     </div>
   );
 }
@@ -593,6 +643,7 @@ export function HostDetailPage({ hostname, onBack }: Props) {
                 key={r.connector}
                 result={r}
                 hostname={hostname}
+                meta={connectorMeta.find(m => m.name === r.connector)}
                 onToggleIgnore={handleToggleIgnore}
                 onRemove={handleRemove}
                 onCommandComplete={load}

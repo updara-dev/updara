@@ -5,6 +5,7 @@ import { ConnectorsPage } from './pages/ConnectorsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { StatsPage } from './pages/StatsPage';
 import { HostDetailPage } from './pages/HostDetailPage';
+import { LoginPage } from './pages/LoginPage';
 import { AddHostWizard } from './components/AddHostWizard';
 import { useT } from './i18n';
 import type { HostStatus } from './types';
@@ -14,6 +15,7 @@ type View = 'dashboard' | 'connectors' | 'settings' | 'stats';
 
 export default function App() {
   const { t, lang, setLang } = useT();
+  const [authed, setAuthed] = useState(() => !!localStorage.getItem('updara_token'));
   const [view, setView] = useState<View>('dashboard');
   const [selectedHostname, setSelectedHostname] = useState<string | null>(null);
   const [hosts, setHosts] = useState<HostStatus[]>([]);
@@ -34,15 +36,23 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!authed) return;
     load();
     const id = setInterval(load, 30_000);
     return () => clearInterval(id);
-  }, [load]);
+  }, [load, authed]);
 
   const updateCount = hosts.reduce(
     (n, h) => n + (h.results ?? []).filter(r => r.update_available).length,
     0,
   );
+
+  if (!authed) return <LoginPage onLogin={() => setAuthed(true)} />;
+
+  const handleLogout = () => {
+    localStorage.removeItem('updara_token');
+    setAuthed(false);
+  };
 
   return (
     <div className="app">
@@ -95,6 +105,7 @@ export default function App() {
               </button>
             </>
           )}
+          <button className="btn-secondary" onClick={handleLogout}>{t.login.logout}</button>
           <div className="lang-toggle">
             <button className={lang === 'en' ? 'active' : ''} onClick={() => setLang('en')}>EN</button>
             <button className={lang === 'de' ? 'active' : ''} onClick={() => setLang('de')}>DE</button>

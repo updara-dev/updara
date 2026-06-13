@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"log"
 	"net/http"
 	"os"
@@ -17,7 +19,23 @@ func main() {
 	addr := env("LISTEN_ADDR", ":8080")
 
 	s := store.New(dbPath)
-	h := api.NewHandler(s, connectorsDir, binariesDir, publicURL)
+
+	authToken := os.Getenv("UPDARA_TOKEN")
+	if authToken == "" {
+		authToken = s.GetSetting("auth_token")
+	}
+	if authToken == "" {
+		b := make([]byte, 32)
+		rand.Read(b)
+		authToken = hex.EncodeToString(b)
+		s.SetSetting("auth_token", authToken)
+		log.Printf("================================================================")
+		log.Printf("  UPDARA TOKEN: %s", authToken)
+		log.Printf("  Set UPDARA_TOKEN env var to use a fixed token.")
+		log.Printf("================================================================")
+	}
+
+	h := api.NewHandler(s, connectorsDir, binariesDir, publicURL, authToken)
 	h.StartNotificationScheduler()
 
 	log.Printf("Updara server listening on %s", addr)

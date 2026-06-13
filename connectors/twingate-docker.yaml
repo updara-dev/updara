@@ -1,0 +1,205 @@
+name: twingate-docker
+display_name: Twingate (Docker)
+category: network
+docs: https://www.twingate.com/docs/
+
+vars:
+  - name: TWINGATE_NETWORK
+    description: "Twingate Network Name — Subdomain deines Netzwerks (z.B. 'mycompany' für mycompany.twingate.com)"
+    required: true
+    default: ""
+  - name: TWINGATE_API_KEY
+    description: "Twingate Admin API Key (Twingate Konsole → Settings → API)"
+    required: true
+    default: ""
+  - name: TWINGATE_CONNECTOR_NAME
+    description: "Optional: Name des Connectors (z.B. olivine-squid) — leer lassen wenn nur einer pro Host läuft"
+    required: false
+    default: ""
+
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, json, sys, os
+    try:
+        from urllib.request import urlopen, Request
+        from urllib.error import HTTPError
+    except ImportError:
+        print("count=0")
+        sys.exit(0)
+
+    network   = os.environ.get('TWINGATE_NETWORK', '').strip()
+    api_key   = os.environ.get('TWINGATE_API_KEY', '').strip()
+    conn_name = os.environ.get('TWINGATE_CONNECTOR_NAME', '').strip()
+
+    if not network or not api_key:
+        print("error=TWINGATE_NETWORK and TWINGATE_API_KEY required")
+        sys.exit(0)
+
+    query = """
+    {
+      connectors {
+        edges {
+          node {
+            name
+            version
+          }
+        }
+      }
+    }
+    """
+    body = json.dumps({"query": query}).encode()
+    req  = Request(
+        f'https://{network}.twingate.com/api/graphql/',
+        data=body,
+        headers={'X-API-Key': api_key, 'Content-Type': 'application/json'},
+        method='POST'
+    )
+    try:
+        resp = json.loads(urlopen(req, timeout=15).read())
+    except HTTPError as e:
+        print(f"error=API {e.code}: {e.reason}")
+        sys.exit(0)
+    except Exception as e:
+        print(f"error={e}")
+        sys.exit(0)
+
+    nodes = [e['node'] for e in resp.get('data', {}).get('connectors', {}).get('edges', [])]
+    if not nodes:
+        print("error=No connectors found in Twingate network")
+        sys.exit(0)
+
+    if conn_name:
+        nodes = [n for n in nodes if n.get('name') == conn_name]
+        if not nodes:
+            print(f"error=Connector '{conn_name}' not found")
+            sys.exit(0)
+
+    # Auto-detect: if no name given, match against running container
+    if not conn_name and len(nodes) > 1:
+        running = subprocess.run(
+            ['docker', 'ps', '--format', '{{.Names}}'],
+            capture_output=True, text=True
+        ).stdout.strip().split('\n')
+        for node in nodes:
+            if any(node['name'] in c for c in running):
+                nodes = [node]
+                break
+
+    node    = nodes[0]
+    current = node.get('version', '')
+
+    # Latest version from Docker Hub tags (highest 1.x.x semver)
+    latest = current
+    try:
+        import re
+        hub = json.loads(urlopen(
+            'https://hub.docker.com/v2/repositories/twingate/connector/tags?page_size=100',
+            timeout=10
+        ).read())
+        tags = [t['name'] for t in hub.get('results', []) if re.match(r'^1\.\d+\.\d+$', t['name'])]
+        tags.sort(key=lambda v: list(map(int, v.split('.'))))
+        if tags:
+            latest = tags[-1]
+    except Exception:
+        pass
+
+    print(f"version=v{current}")
+    print(f"latest=v{latest}")
+    print(f"connector={node.get('name', '')}")
+    PYEOF
+  parse:
+    version:   "$version"
+    latest:    "$latest"
+    connector: "$connector"
+  update_available: "version != latest"
+  interval: 3600
+
+update:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, json, sys, os, shlex, re
+
+    run_cmd = os.environ.get('DOCKER_RUN_CMD', '').strip()
+
+    # Find the Twingate container on this host
+    result = subprocess.run(
+        ['docker', 'ps', '--format', '{{.Names}}\t{{.Image}}'],
+        capture_output=True, text=True
+    )
+    container = ''
+    image     = ''
+    for line in result.stdout.strip().split('\n'):
+        if 'twingate/connector' in line:
+            parts = line.split('\t')
+            container, image = parts[0], parts[1]
+            break
+
+    if not container:
+        print("Error: No running Twingate container found")
+        sys.exit(1)
+
+    print(f"[Updara] Pulling {image}...")
+    if subprocess.run(['docker', 'pull', image]).returncode != 0:
+        print("Error: docker pull failed")
+        sys.exit(1)
+
+    if not run_cmd:
+        info = json.loads(subprocess.run(['docker', 'inspect', container], capture_output=True, text=True).stdout)[0]
+        cfg  = info['Config']
+        hcfg = info['HostConfig']
+
+        args = ['docker', 'run', '-d', f'--name={container}']
+
+        restart = hcfg.get('RestartPolicy', {})
+        rname = restart.get('Name', '')
+        if rname and rname != 'no':
+            retries = restart.get('MaximumRetryCount', 0)
+            args.append(f'--restart={rname}:{retries}' if rname == 'on-failure' and retries else f'--restart={rname}')
+
+        network = hcfg.get('NetworkMode', '')
+        if network and network not in ('default', 'bridge'):
+            args.append(f'--network={network}')
+
+        for cap in (hcfg.get('CapAdd') or []):
+            args.append(f'--cap-add={cap}')
+        for k, v in (hcfg.get('Sysctls') or {}).items():
+            args.append(f'--sysctl={k}={v}')
+        if hcfg.get('Privileged'):
+            args.append('--privileged')
+        for dns in (hcfg.get('Dns') or []):
+            args.append(f'--dns={dns}')
+        for port, bindings in (hcfg.get('PortBindings') or {}).items():
+            for b in (bindings or []):
+                host_ip, host_port = b.get('HostIp', ''), b.get('HostPort', '')
+                args.append(f'--publish={host_ip}:{host_port}:{port}' if host_ip else f'--publish={host_port}:{port}')
+        for bind in (hcfg.get('Binds') or []):
+            args.append(f'--volume={bind}')
+        for env in (cfg.get('Env') or []):
+            args.append(f'--env={env}')
+        hostname = cfg.get('Hostname', '')
+        if hostname and not re.match(r'^[0-9a-f]{12}$', hostname):
+            args.append(f'--hostname={hostname}')
+
+        args.append(image)
+        run_cmd = ' '.join(shlex.quote(a) for a in args)
+        print(f"[Updara] Reconstructed: {run_cmd}")
+
+    print(f"[Updara] Stopping {container}...")
+    subprocess.run(['docker', 'stop', container])
+    subprocess.run(['docker', 'rm', container])
+
+    print(f"[Updara] Starting {container}...")
+    result = subprocess.run(run_cmd, shell=True, capture_output=True, text=True)
+    if result.returncode == 0:
+        print(f"[Updara] Done — {result.stdout.strip()}")
+    else:
+        print(f"Error: {result.stderr}")
+        sys.exit(1)
+    PYEOF
+  requires_confirmation: true
+
+notifications:
+  changelog: "https://www.twingate.com/docs/release-notes"

@@ -99,12 +99,18 @@ func (h *Handler) getProvisionConfig(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) listConnectors(w http.ResponseWriter, r *http.Request) {
 	entries, _ := os.ReadDir(h.connectorsDir)
 
+	type connUpdateBlock struct {
+		Command string `yaml:"command"`
+	}
 	type connMeta struct {
 		Name        string          `yaml:"name"         json:"name"`
 		DisplayName string          `yaml:"display_name" json:"display_name"`
 		Category    string          `yaml:"category"     json:"category"`
 		Docs        string          `yaml:"docs"         json:"docs"`
 		Vars        []model.VarDef  `yaml:"vars"         json:"vars"`
+		Hint        string          `yaml:"hint"         json:"hint,omitempty"`
+		Update      connUpdateBlock `yaml:"update"       json:"-"`
+		HasUpdate   bool            `yaml:"-"            json:"has_update"`
 	}
 
 	var out []connMeta
@@ -123,6 +129,7 @@ func (h *Handler) listConnectors(w http.ResponseWriter, r *http.Request) {
 		if m.Vars == nil {
 			m.Vars = []model.VarDef{}
 		}
+		m.HasUpdate = m.Update.Command != ""
 		out = append(out, m)
 	}
 
@@ -313,7 +320,10 @@ func (h *Handler) deleteHostConnector(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid connector name", http.StatusBadRequest)
 		return
 	}
-	deleteCmd := fmt.Sprintf("rm -f /etc/updara/connectors/%s.yaml", connector)
+	deleteCmd := fmt.Sprintf(
+		"rm -f /etc/updara/connectors/%s.yaml && nohup sh -c 'sleep 2 && systemctl restart updara-agent' >/dev/null 2>&1 &",
+		connector,
+	)
 	b := make([]byte, 8)
 	rand.Read(b)
 	h.store.AddCommand(model.Command{
@@ -417,7 +427,7 @@ func (h *Handler) buildServiceFile(serverURL, token, hostname string, connectors
 	var envLines strings.Builder
 	envLines.WriteString(fmt.Sprintf("Environment=SERVER_URL=%s\n", serverURL))
 	envLines.WriteString(fmt.Sprintf("Environment=UPDARA_TOKEN=%s\n", token))
-	envLines.WriteString(fmt.Sprintf("Environment=HOSTNAME_OVERRIDE=%s\n", hostname))
+	envLines.WriteString(fmt.Sprintf("Environment=\"HOSTNAME_OVERRIDE=%s\"\n", hostname))
 	envLines.WriteString("Environment=CONNECTORS_DIR=/etc/updara/connectors\n")
 	for _, c := range connectors {
 		for k, v := range c.Vars {

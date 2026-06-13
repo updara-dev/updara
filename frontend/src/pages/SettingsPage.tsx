@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
-import { fetchNotificationSettings, saveNotificationSettings, testNotification } from '../api/client';
+import { fetchNotificationSettings, saveNotificationSettings, testNotification, testDigest } from '../api/client';
 import type { NotificationSettings } from '../api/client';
 import { useT } from '../i18n';
 
 const empty: NotificationSettings = {
   ntfy_url: '', ntfy_topic: '', ntfy_enabled: false,
   telegram_token: '', telegram_chat_id: '', telegram_enabled: false,
+  email_enabled: false, email_host: '', email_port: '587',
+  email_username: '', email_password: '', email_from: '', email_to: '',
+  email_tls: 'starttls',
+  digest_enabled: false, digest_frequency: 'monthly', digest_weekday: 1,
+  digest_day: 1, digest_time: '08:00',
   cooldown_days: 3, min_count: 0,
   batch_schedule: 'immediate', batch_time1: '07:00', batch_time2: '19:00',
   show_lts_upgrades: true,
@@ -16,6 +21,7 @@ export function SettingsPage() {
   const [cfg, setCfg] = useState<NotificationSettings>(empty);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
+  const [digestTestStatus, setDigestTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
   const [errMsg, setErrMsg] = useState('');
 
   useEffect(() => {
@@ -49,7 +55,19 @@ export function SettingsPage() {
     }
   };
 
-  const anyEnabled = cfg.ntfy_enabled || cfg.telegram_enabled;
+  const anyEnabled = cfg.ntfy_enabled || cfg.telegram_enabled || cfg.email_enabled;
+
+  const handleTestDigest = async () => {
+    setDigestTestStatus('testing');
+    try {
+      await testDigest();
+      setDigestTestStatus('ok');
+      setTimeout(() => setDigestTestStatus('idle'), 3000);
+    } catch (e) {
+      setErrMsg(String(e));
+      setDigestTestStatus('error');
+    }
+  };
 
   return (
     <div className="settings-page">
@@ -94,6 +112,103 @@ export function SettingsPage() {
             <span>{t.settings.telegramChatId}</span>
             <input className="settings-input" value={cfg.telegram_chat_id} onChange={e => set('telegram_chat_id', e.target.value)} placeholder="123456789" />
           </label>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section__header">
+          <h3>{t.settings.emailSection}</h3>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={cfg.email_enabled} onChange={e => set('email_enabled', e.target.checked)} />
+            <span>{t.settings.enabled}</span>
+          </label>
+        </div>
+        <p className="settings-section__hint">{t.settings.emailHint}</p>
+        <div className="settings-fields">
+          <label className="settings-field">
+            <span>{t.settings.emailHost}</span>
+            <input className="settings-input" value={cfg.email_host} onChange={e => set('email_host', e.target.value)} placeholder="smtp.gmail.com" />
+          </label>
+          <label className="settings-field">
+            <span>{t.settings.emailPort}</span>
+            <input className="settings-input settings-input--short" value={cfg.email_port} onChange={e => set('email_port', e.target.value)} placeholder="587" />
+          </label>
+          <label className="settings-field">
+            <span>{t.settings.emailTLS}</span>
+            <select className="settings-select" value={cfg.email_tls} onChange={e => set('email_tls', e.target.value)}>
+              <option value="starttls">{t.settings.emailTLSStarttls}</option>
+              <option value="ssl">{t.settings.emailTLSSsl}</option>
+              <option value="none">{t.settings.emailTLSNone}</option>
+            </select>
+          </label>
+          <label className="settings-field">
+            <span>{t.settings.emailUsername}</span>
+            <input className="settings-input" value={cfg.email_username} onChange={e => set('email_username', e.target.value)} placeholder="you@gmail.com" />
+          </label>
+          <label className="settings-field">
+            <span>{t.settings.emailPassword}</span>
+            <input className="settings-input" type="password" value={cfg.email_password} onChange={e => set('email_password', e.target.value)} placeholder="App password" />
+          </label>
+          <label className="settings-field">
+            <span>{t.settings.emailFrom}</span>
+            <input className="settings-input" value={cfg.email_from} onChange={e => set('email_from', e.target.value)} placeholder="updara@yourdomain.com" />
+          </label>
+          <label className="settings-field">
+            <span>{t.settings.emailTo}</span>
+            <input className="settings-input" value={cfg.email_to} onChange={e => set('email_to', e.target.value)} placeholder="you@yourdomain.com" />
+          </label>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section__header">
+          <h3>{t.settings.digestSection}</h3>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={cfg.digest_enabled} onChange={e => set('digest_enabled', e.target.checked)} />
+            <span>{t.settings.enabled}</span>
+          </label>
+        </div>
+        <p className="settings-section__hint">{t.settings.digestHint}</p>
+        <div className="settings-num-fields">
+          <div className="settings-num-row">
+            <label className="settings-num-row__label">{t.settings.digestFrequency}</label>
+            <select className="settings-select" value={cfg.digest_frequency} onChange={e => set('digest_frequency', e.target.value)}>
+              <option value="daily">{t.settings.digestFreqDaily}</option>
+              <option value="weekly">{t.settings.digestFreqWeekly}</option>
+              <option value="monthly">{t.settings.digestFreqMonthly}</option>
+            </select>
+          </div>
+          {cfg.digest_frequency === 'weekly' && (
+            <div className="settings-num-row">
+              <label className="settings-num-row__label">{t.settings.digestWeekday}</label>
+              <select className="settings-select" value={cfg.digest_weekday} onChange={e => set('digest_weekday', parseInt(e.target.value))}>
+                {t.settings.digestWeekdays.map((day, i) => (
+                  <option key={i} value={i + 1}>{day}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {cfg.digest_frequency === 'monthly' && (
+            <div className="settings-num-row">
+              <label className="settings-num-row__label">{t.settings.digestDay}</label>
+              <input className="settings-num-row__input" type="number" min={1} max={28} value={cfg.digest_day}
+                onChange={e => set('digest_day', parseInt(e.target.value) || 1)} />
+              <span className="settings-num-row__hint">{t.settings.digestDayHint}</span>
+            </div>
+          )}
+          <div className="settings-num-row">
+            <label className="settings-num-row__label">{t.settings.digestTime}</label>
+            <input className="settings-num-row__input settings-time-input" type="time" value={cfg.digest_time}
+              onChange={e => set('digest_time', e.target.value)} />
+          </div>
+        </div>
+        <div className="settings-digest-footer">
+          {digestTestStatus === 'error' && <span className="settings-status settings-status--err">{t.settings.testDigestError(errMsg)}</span>}
+          {digestTestStatus === 'ok' && <span className="settings-status settings-status--ok">{t.settings.testDigestOk}</span>}
+          <button className="btn-secondary" onClick={handleTestDigest}
+            disabled={!cfg.email_enabled || !cfg.digest_enabled || digestTestStatus === 'testing'}>
+            {digestTestStatus === 'testing' ? t.settings.testDigestSending : t.settings.testDigestBtn}
+          </button>
         </div>
       </div>
 
