@@ -10,7 +10,7 @@ services:
       DB_PATH: "/data/updara.db"
       CONNECTORS_DIR: "/app/connectors"
       BINARIES_DIR: "/app/binaries"
-      PUBLIC_URL: "http://10.0.0.244:8080"
+      PUBLIC_URL: "${UPDARA_PUBLIC_URL:-http://10.0.0.244:8080}"
     volumes:
       - ./connectors:/app/connectors:ro
       - updara_data:/data
