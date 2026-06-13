@@ -6,13 +6,6 @@ COMPOSE_URL="https://raw.githubusercontent.com/updara-dev/updara/main/docker-com
 
 if [ -z "$UPDARA_PUBLIC_URL" ]; then
   IP=$(hostname -I 2>/dev/null | awk '{print $1}')
-  echo ""
-  echo "Updara Server Install"
-  echo "====================="
-  echo ""
-  printf "Server IP or hostname [detected: %s]: " "$IP"
-  read -r INPUT
-  [ -n "$INPUT" ] && IP="$INPUT"
   UPDARA_PUBLIC_URL="http://$IP:8080"
 fi
 
