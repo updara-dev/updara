@@ -25,9 +25,11 @@ The agent runs on each host and phones home outbound only — no open ports, CGN
 - **YAML connector engine** — shell commands or HTTP API checks, no code required
 - **Update execution** — trigger updates from the dashboard, watch live output
 - **Bulk updates** — select and update multiple hosts/connectors at once
-- **Notifications** — ntfy and Telegram
+- **Notifications** — ntfy, Telegram, and Email (SMTP)
+- **Monthly digest** — scheduled email summary with all pending updates and errors
+- **Token authentication** — login-protected dashboard and API
 - **Outbound-only agent** — works behind CGNAT, no inbound ports needed
-- **One-line install** — `curl | sh` provisioning with per-host connector config
+- **One-line install** — `curl | sh` provisioning for both server and agents
 - **OS end-of-life tracking** — know when your distro goes EOL before it happens
 
 ---
@@ -42,10 +44,15 @@ The agent runs on each host and phones home outbound only — no open ports, CGN
 | `docker-images` | Docker image updates via registry digest comparison |
 | `portainer-api` | Portainer stacks via API |
 | `pihole` | Pi-hole core & FTL version |
-| `n8n` | n8n workflow engine version |
-| `nginx` | Nginx version |
-| `bookstack` | BookStack version |
-| `trilium` | Trilium Notes version |
+| `n8n-docker` | n8n (Docker) — container image updates |
+| `immich-docker` | Immich (Docker) — container image updates |
+| `ntfy-docker` | ntfy (Docker) — container image updates |
+| `twingate-docker` | Twingate connector (Docker) |
+| `standalone-docker` | Generic standalone Docker container updates |
+| `proxmox-apt` | Proxmox VE package updates |
+| `proxmox-eol` | Proxmox VE end-of-life status |
+| `iobroker-native` | ioBroker (native install) adapter updates |
+| `iobroker-adapters` | ioBroker adapter updates via admin API |
 
 Writing your own connector is a single YAML file — see [Connector Format](#connector-format) below.
 
@@ -67,35 +74,43 @@ The server stores host state and queues commands. Agents poll for pending comman
 
 ## Getting Started
 
-### Server (Docker Compose)
+### 1. Install the server
 
-```yaml
-services:
-  server:
-    image: ghcr.io/updara-dev/updara-server:latest
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./data:/data
-      - ./connectors:/connectors
-
-  frontend:
-    image: ghcr.io/updara-dev/updara-frontend:latest
-    ports:
-      - "4000:80"
-    environment:
-      - API_URL=http://your-server:8080
-```
-
-### Agent
-
-Create a provision in the dashboard (+ Add Host), then run the one-liner on the target host:
+On any Linux host with Docker:
 
 ```bash
-curl -sSL http://your-updara-server/install | sh -s -- --token <provision-token>
+curl -fsSL https://raw.githubusercontent.com/updara-dev/updara/main/install-server.sh | sh
 ```
 
-The agent installs as a systemd service and starts reporting immediately. Each host gets exactly the connectors you selected during provisioning.
+The script auto-detects the server IP, pulls the images from ghcr.io, starts everything, and prints the dashboard URL + login token.
+
+**Frontend:** `http://<server-ip>:4000`
+**API:** `http://<server-ip>:8080`
+
+> If your server has multiple network interfaces and the wrong IP is detected, you can override:
+> ```bash
+> UPDARA_PUBLIC_URL=http://10.0.1.50:8080 curl -fsSL .../install-server.sh | sh
+> ```
+
+### 2. Add a host
+
+Open the dashboard → **+ Add Host**, enter a name, select connectors, and copy the generated install command. Run it on the target host as root:
+
+```bash
+wget -qO- 'http://<server-ip>:8080/install?token=<provision-token>' | sh
+```
+
+The agent installs as a systemd service and appears in the dashboard within a minute. Each host gets exactly the connectors you selected during provisioning.
+
+### 3. Updates
+
+Pull the latest images to update your Updara server:
+
+```bash
+cd /opt/updara
+docker compose -f docker-compose.dist.yml pull
+docker compose -f docker-compose.dist.yml up -d
+```
 
 ---
 
@@ -134,7 +149,7 @@ notifications:
   changelog: "https://github.com/my-app/releases"
 ```
 
-Drop the file into the `connectors/` directory on the server — it becomes available to all agents on next sync.
+Drop the file into the `connectors/` directory on the server (or add it via the Connectors page in the UI) — it becomes available to all agents on next sync.
 
 ---
 
@@ -146,16 +161,17 @@ Drop the file into the `connectors/` directory on the server — it becomes avai
 - [x] Update execution with live output
 - [x] Bulk update selection
 - [x] Per-host connector ignore / disable
-- [x] ntfy + Telegram notifications
+- [x] ntfy, Telegram + Email (SMTP) notifications
+- [x] Monthly/weekly/daily digest emails
+- [x] Token authentication
 - [x] Dashboard list/card view toggle with filter
 - [x] Host rename (display name)
 - [x] OS end-of-life tracking
+- [x] One-line server install script
 
 **Planned**
-- [ ] More connectors (Proxmox, Home Assistant, Immich, Vaultwarden, ...)
-- [ ] Email notifications (SMTP)
-- [ ] Authentication
-- [ ] Proxmox LXC community script (one-liner server setup)
+- [ ] More connectors (Home Assistant, Vaultwarden, ...)
+- [ ] Proxmox LXC community script
 - [ ] Connector contribution guide
 
 ---
