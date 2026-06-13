@@ -76,21 +76,26 @@ The server stores host state and queues commands. Agents poll for pending comman
 
 ### 1. Install the server
 
-On any Linux host with Docker:
+On any Linux host with Docker — pick one:
 
+**Option A — one-liner:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/updara-dev/updara/main/install-server.sh | sh
 ```
 
-The script auto-detects the server IP, pulls the images from ghcr.io, starts everything, and prints the dashboard URL + login token.
+**Option B — manual (recommended if you want to see what runs):**
+```bash
+mkdir /opt/updara && cd /opt/updara
+curl -fsSL https://raw.githubusercontent.com/updara-dev/updara/main/docker-compose.dist.yml -o docker-compose.dist.yml
+echo "UPDARA_PUBLIC_URL=http://$(hostname -I | awk '{print $1}'):8080" > .env
+docker compose -f docker-compose.dist.yml up -d
+docker compose -f docker-compose.dist.yml logs server | grep "UPDARA TOKEN"
+```
+
+Both options auto-detect the server IP and print the login token at the end.
 
 **Frontend:** `http://<server-ip>:4000`
 **API:** `http://<server-ip>:8080`
-
-> If your server has multiple network interfaces and the wrong IP is detected, you can override:
-> ```bash
-> UPDARA_PUBLIC_URL=http://10.0.1.50:8080 curl -fsSL .../install-server.sh | sh
-> ```
 
 ### 2. Add a host
 
