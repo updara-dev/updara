@@ -26,7 +26,7 @@ export default function App() {
   const load = useCallback(async () => {
     try {
       const data = await fetchHosts();
-      setHosts(data);
+      setHosts(data ?? []);
       setError(null);
     } catch (e) {
       setError(String(e));
