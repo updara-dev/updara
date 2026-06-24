@@ -1,0 +1,124 @@
+name: rustdesk-server
+display_name: RustDesk Server
+category: network
+docs: https://rustdesk.com/docs/en/self-host/rustdesk-server-oss/install/
+
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, json, sys, re
+    from urllib.request import urlopen
+
+    result = subprocess.run(['hbbs', '--version'], capture_output=True, text=True)
+    output = (result.stdout + result.stderr).strip()
+
+    if not output:
+        print("error=hbbs binary not found")
+        sys.exit(0)
+
+    match = re.search(r'(\d+\.\d+[\.\d]*)', output)
+    if not match:
+        print(f"error=Could not parse version: {output}")
+        sys.exit(0)
+
+    current = match.group(1)
+
+    try:
+        resp = json.loads(urlopen(
+            'https://api.github.com/repos/rustdesk/rustdesk-server/releases/latest',
+            timeout=10
+        ).read())
+        latest = resp.get('tag_name', current).lstrip('v')
+    except Exception:
+        latest = current
+
+    print(f"version=v{current}")
+    print(f"latest=v{latest}")
+    PYEOF
+  parse:
+    version: "$version"
+    latest:  "$latest"
+  update_available: "version != latest"
+  interval: 3600
+
+update:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, json, sys, os, re, platform, shutil, urllib.request
+    from urllib.request import urlopen
+
+    resp = json.loads(urlopen(
+        'https://api.github.com/repos/rustdesk/rustdesk-server/releases/latest',
+        timeout=10
+    ).read())
+    tag    = resp.get('tag_name', '')
+    assets = resp.get('assets', [])
+
+    arch = 'aarch64' if platform.machine().lower() in ('aarch64', 'arm64') else 'x86_64'
+
+    asset_url = next(
+        (a['browser_download_url'] for a in assets
+         if arch in a['name'] and 'linux' in a['name'].lower() and a['name'].endswith('.tar.gz')),
+        None
+    )
+    if not asset_url:
+        print(f"Error: no asset found for linux/{arch} in release {tag}")
+        sys.exit(1)
+
+    tmp = '/tmp/rustdesk-update'
+    shutil.rmtree(tmp, ignore_errors=True)
+    os.makedirs(tmp)
+
+    fname = asset_url.split('/')[-1]
+    print(f"[Updara] Downloading {tag} ({arch})...")
+    urllib.request.urlretrieve(asset_url, f'{tmp}/{fname}')
+    subprocess.run(['tar', '-xzf', f'{tmp}/{fname}', '-C', tmp], check=True)
+
+    # Find installed binary paths
+    hbbs_path = subprocess.run(['which', 'hbbs'], capture_output=True, text=True).stdout.strip() or '/usr/bin/hbbs'
+    hbbr_path = subprocess.run(['which', 'hbbr'], capture_output=True, text=True).stdout.strip() or '/usr/bin/hbbr'
+
+    # Detect systemd service names
+    for svc in ['hbbs', 'rustdesk-hbbs']:
+        r = subprocess.run(['systemctl', 'is-active', '--quiet', svc])
+        if r.returncode == 0:
+            svc_hbbs = svc
+            break
+    else:
+        svc_hbbs = 'hbbs'
+
+    for svc in ['hbbr', 'rustdesk-hbbr']:
+        r = subprocess.run(['systemctl', 'is-active', '--quiet', svc])
+        if r.returncode == 0:
+            svc_hbbr = svc
+            break
+    else:
+        svc_hbbr = 'hbbr'
+
+    print(f"[Updara] Stopping {svc_hbbs} + {svc_hbbr}...")
+    subprocess.run(['systemctl', 'stop', svc_hbbs, svc_hbbr])
+
+    for binary, target in [('hbbs', hbbs_path), ('hbbr', hbbr_path)]:
+        extracted = next(
+            (os.path.join(r, binary) for r, _, fs in os.walk(tmp) if binary in fs),
+            None
+        )
+        if extracted:
+            shutil.copy2(extracted, target)
+            os.chmod(target, 0o755)
+            print(f"[Updara] Replaced {target}")
+
+    print(f"[Updara] Starting {svc_hbbs} + {svc_hbbr}...")
+    subprocess.run(['systemctl', 'start', svc_hbbs, svc_hbbr])
+
+    import time; time.sleep(2)
+    out = subprocess.run(['hbbs', '--version'], capture_output=True, text=True)
+    print(f"[Updara] Done — {(out.stdout + out.stderr).strip()}")
+    shutil.rmtree(tmp, ignore_errors=True)
+    PYEOF
+  requires_confirmation: true
+
+notifications:
+  changelog: "https://github.com/rustdesk/rustdesk-server/releases"
