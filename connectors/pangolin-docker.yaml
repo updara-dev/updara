@@ -1,0 +1,59 @@
+name: pangolin-docker
+display_name: Pangolin (Docker)
+category: network
+docs: https://docs.pangolin.rs/
+
+vars:
+  - name: PANGOLIN_COMPOSE_DIR
+    description: "Directory containing docker-compose.yml for Pangolin (default: /root)"
+    required: false
+    default: "/root"
+
+check:
+  type: shell
+  command: |
+    python3 - <<'PYEOF'
+    import subprocess, json, sys, re, os
+    from urllib.request import urlopen
+
+    current = subprocess.run(
+        ['docker', 'inspect', 'pangolin', '--format',
+         '{{index .Config.Labels "org.opencontainers.image.version"}}'],
+        capture_output=True, text=True
+    ).stdout.strip()
+
+    if not current:
+        print("error=Container 'pangolin' not found or missing version label")
+        sys.exit(0)
+
+    try:
+        resp = json.loads(urlopen(
+            'https://api.github.com/repos/fosrl/pangolin/releases/latest',
+            timeout=10
+        ).read())
+        latest = resp.get('tag_name', current).lstrip('v')
+    except Exception:
+        latest = current
+
+    print(f"version=v{current.lstrip('v')}")
+    print(f"latest=v{latest}")
+    PYEOF
+  parse:
+    version: "$version"
+    latest:  "$latest"
+  update_available: "version != latest"
+  interval: 3600
+
+update:
+  type: shell
+  command: |
+    COMPOSE_DIR="${PANGOLIN_COMPOSE_DIR:-/root}"
+    echo "[Updara] Pulling latest Pangolin images..."
+    docker compose -f "$COMPOSE_DIR/docker-compose.yml" pull
+    echo "[Updara] Restarting containers..."
+    docker compose -f "$COMPOSE_DIR/docker-compose.yml" up -d
+    echo "[Updara] Done."
+  requires_confirmation: true
+
+notifications:
+  changelog: "https://github.com/fosrl/pangolin/releases"
