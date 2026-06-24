@@ -5,15 +5,15 @@ docs: https://www.twingate.com/docs/
 
 vars:
   - name: TWINGATE_NETWORK
-    description: "Twingate Network Name — Subdomain deines Netzwerks (z.B. 'mycompany' für mycompany.twingate.com)"
+    description: "Your Twingate network subdomain only — e.g. 'mycompany' for mycompany.twingate.com"
     required: true
     default: ""
   - name: TWINGATE_API_KEY
-    description: "Twingate Admin API Key (Twingate Konsole → Settings → API)"
+    description: "Twingate Admin API Key — Twingate Console → Settings → API"
     required: true
     default: ""
   - name: TWINGATE_CONNECTOR_NAME
-    description: "Optional: Name des Connectors (z.B. olivine-squid) — leer lassen wenn nur einer pro Host läuft"
+    description: "Connector name (e.g. olivine-squid) — leave empty if only one connector runs on this host"
     required: false
     default: ""
 
