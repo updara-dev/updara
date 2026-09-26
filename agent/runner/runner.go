@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -59,6 +60,20 @@ func Run(ctx context.Context, c connector.Connector) Result {
 	}
 
 	r.Values = values
+
+	// A parse key used in the expression but absent from the output means the
+	// check didn't really succeed (e.g. app still starting) — report an error
+	// instead of comparing the bare key names ("current" != "latest" → true).
+	for _, key := range exprOperands(c.Check.UpdateAvailable) {
+		if _, declared := c.Check.Parse[key]; !declared {
+			continue
+		}
+		if _, ok := values[key]; !ok {
+			r.Error = fmt.Sprintf("check returned no value for %q", key)
+			return r
+		}
+	}
+
 	r.UpdateAvailable = evalExpr(c.Check.UpdateAvailable, values)
 	return r
 }
@@ -90,6 +105,11 @@ func runShell(ctx context.Context, c connector.Check) (map[string]string, error)
 			v := strings.TrimSpace(line[idx+1:])
 			lineMap["$"+k] = v
 		}
+	}
+
+	// Convention: a check script prints "error=..." when it can't determine the state.
+	if e := lineMap["$error"]; e != "" {
+		return nil, errors.New(e)
 	}
 
 	values := make(map[string]string)
@@ -199,6 +219,16 @@ func evalExpr(expr string, values map[string]string) bool {
 		}
 	}
 	return false
+}
+
+// exprOperands returns the left and right operand of a comparison expression.
+func exprOperands(expr string) []string {
+	for _, op := range []string{"!=", "==", ">=", "<=", ">", "<"} {
+		if idx := strings.Index(expr, op); idx >= 0 {
+			return []string{strings.TrimSpace(expr[:idx]), strings.TrimSpace(expr[idx+len(op):])}
+		}
+	}
+	return nil
 }
 
 func resolve(token string, values map[string]string) string {

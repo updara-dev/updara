@@ -25,7 +25,17 @@ const (
 	defaultInterval  = 3600
 	reportInterval   = 60
 	syncInterval     = 3600 // check for connector updates every hour
-	agentVersion     = "0.1.0"
+	agentVersion     = "0.1.1"
+
+	// A check may run while the host is still busy (e.g. right after an update
+	// restarted the app) — give it room, and retry failed checks soon instead
+	// of showing a stale error until the next regular interval.
+	checkTimeout  = 2 * time.Minute
+	retryInterval = 120
+
+	// Update commands (e.g. apt dist-upgrade) can legitimately take >10 min.
+	// On timeout only the outer shell is killed; its children keep running.
+	commandTimeout = 60 * time.Minute
 )
 
 func main() {
@@ -61,12 +71,16 @@ func main() {
 				interval = defaultInterval
 			}
 			for {
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), checkTimeout)
 				result := runner.Run(ctx, c)
 				cancel()
 
+				wait := interval
 				if result.Error != "" {
 					log.Printf("[%s] error: %s", c.Name, result.Error)
+					if wait > retryInterval {
+						wait = retryInterval
+					}
 				} else {
 					log.Printf("[%s] update_available=%v values=%v", c.Name, result.UpdateAvailable, result.Values)
 				}
@@ -75,7 +89,7 @@ func main() {
 				latest[c.Name] = result
 				mu.Unlock()
 
-				time.Sleep(time.Duration(interval) * time.Second)
+				time.Sleep(time.Duration(wait) * time.Second)
 			}
 		}()
 	}
@@ -155,13 +169,17 @@ func pollCommands(
 
 	for _, cmd := range cmds {
 		log.Printf("[cmd:%s] executing: %s", cmd.ID, cmd.Cmd)
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
 		out, execErr := exec.CommandContext(ctx, "sh", "-c", cmd.Cmd).CombinedOutput()
+		timedOut := ctx.Err() == context.DeadlineExceeded
 		cancel()
 
 		status := "done"
 		if execErr != nil {
 			status = "failed"
+			if timedOut {
+				out = append(out, fmt.Sprintf("\n[Updara] command timed out after %s — child processes may still have completed, check the host\n", commandTimeout)...)
+			}
 		}
 		log.Printf("[cmd:%s] %s", cmd.ID, status)
 
@@ -174,7 +192,7 @@ func pollCommands(
 				if c.Name != cmd.Connector {
 					continue
 				}
-				ctx2, cancel2 := context.WithTimeout(context.Background(), 30*time.Second)
+				ctx2, cancel2 := context.WithTimeout(context.Background(), checkTimeout)
 				result := runner.Run(ctx2, c)
 				cancel2()
 				log.Printf("[%s] re-check after update: update_available=%v values=%v",
