@@ -12,16 +12,20 @@ check:
   type: shell
   command: |
     PROBE=$(cat <<'EOF'
-    for r in node python3 php; do
-      b=$(command -v $r 2>/dev/null) || continue
-      case $r in
-        node)    v=$(node -v 2>/dev/null | sed 's/^v//') ;;
-        python3) v=$(python3 -c 'import platform; print(platform.python_version())' 2>/dev/null) ;;
-        php)     v=$(php -r 'echo PHP_VERSION;' 2>/dev/null) ;;
+    # PATH lookups plus executables of running processes — catches runtimes
+    # bundled by apps (e.g. Trilium ships its own node outside PATH).
+    bins=$({ for r in node python3 php; do command -v $r 2>/dev/null; done
+             for e in /proc/[0-9]*/exe; do readlink "$e" 2>/dev/null; done; } |
+           sed 's/ (deleted)$//' | while read -r b; do readlink -f "$b" 2>/dev/null || echo "$b"; done | sort -u)
+    for f in $bins; do
+      case "${f##*/}" in
+        node) r=node; v=$("$f" -v 2>/dev/null | sed 's/^v//') ;;
+        python3|python3.[0-9]*) r=python3; v=$("$f" -c 'import platform; print(platform.python_version())' 2>/dev/null) ;;
+        php|php[0-9]*|php-fpm*|php-cgi*) r=php; v=$("$f" -v 2>/dev/null | sed -n '1s/^PHP \([0-9][0-9.]*\).*/\1/p') ;;
+        *) continue ;;
       esac
       [ -n "$v" ] || continue
       o=""
-      f=$(readlink -f "$b" 2>/dev/null || echo "$b")
       if command -v dpkg >/dev/null 2>&1; then
         p=$(dpkg -S "$f" 2>/dev/null | head -n1 | cut -d: -f1)
         if [ -n "$p" ]; then
