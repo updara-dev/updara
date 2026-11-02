@@ -185,6 +185,67 @@ export const testNotification = () =>
 export const testDigest = () =>
   request<void>('/api/v1/settings/notifications/test-digest', { method: 'POST' });
 
+export interface SecurityFinding {
+  host_id: string;
+  host_name: string;
+  location: string;
+  runtime: string;
+  kind: 'security' | 'kev' | 'eol';
+  installed: string;
+  fixed: string;
+  cves: string[] | null;
+  kev: boolean;
+  distro: boolean;
+  detail: string;
+  first_seen: string;
+  notified: boolean;
+}
+
+export interface FeedStatus {
+  name: string;
+  fetched_at: string;
+  entries: number;
+  error?: string;
+}
+
+export interface SecurityOverview {
+  enabled: boolean;
+  findings: SecurityFinding[];
+  feeds: FeedStatus[];
+  hosts: number;
+  last_run?: string;
+}
+
+export const fetchSecurity = () =>
+  request<SecurityOverview>('/api/v1/security');
+
+export const runSecurityCheck = () =>
+  request<SecurityOverview>('/api/v1/security/run', { method: 'POST' });
+
+export interface SecuritySettings {
+  enabled: boolean;
+  alert_kev: boolean;
+  alert_security_release: boolean;
+  alert_eol: boolean;
+  notify_resolved: boolean;
+  digest_enabled: boolean;
+  digest_weekday: number;
+  digest_time: string;
+}
+
+export const fetchSecuritySettings = () =>
+  request<SecuritySettings>('/api/v1/settings/security');
+
+export const saveSecuritySettings = (s: SecuritySettings) =>
+  request<void>('/api/v1/settings/security', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(s),
+  });
+
+export const testSecurityDigest = () =>
+  request<void>('/api/v1/settings/security/test-digest', { method: 'POST' });
+
 export interface HostStatSummary {
   hostname: string;
   ip_address: string;

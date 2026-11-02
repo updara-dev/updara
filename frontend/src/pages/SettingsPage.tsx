@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
-import { fetchNotificationSettings, saveNotificationSettings, testNotification, testDigest } from '../api/client';
-import type { NotificationSettings } from '../api/client';
+import {
+  fetchNotificationSettings, saveNotificationSettings, testNotification, testDigest,
+  fetchSecuritySettings, saveSecuritySettings, testSecurityDigest,
+} from '../api/client';
+import type { NotificationSettings, SecuritySettings } from '../api/client';
 import { useT } from '../i18n';
 
 const empty: NotificationSettings = {
@@ -16,9 +19,16 @@ const empty: NotificationSettings = {
   show_lts_upgrades: true,
 };
 
+const securityDefaults: SecuritySettings = {
+  enabled: true, alert_kev: true, alert_security_release: true, alert_eol: true,
+  notify_resolved: true, digest_enabled: true, digest_weekday: 1, digest_time: '08:00',
+};
+
 export function SettingsPage() {
   const { t } = useT();
   const [cfg, setCfg] = useState<NotificationSettings>(empty);
+  const [sec, setSec] = useState<SecuritySettings>(securityDefaults);
+  const [secDigestStatus, setSecDigestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
   const [digestTestStatus, setDigestTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
@@ -26,15 +36,20 @@ export function SettingsPage() {
 
   useEffect(() => {
     fetchNotificationSettings().then(setCfg).catch(() => {});
+    fetchSecuritySettings().then(setSec).catch(() => {});
   }, []);
 
   const set = (key: keyof NotificationSettings, value: string | boolean | number) =>
     setCfg(prev => ({ ...prev, [key]: value }));
 
+  const setS = (key: keyof SecuritySettings, value: string | boolean | number) =>
+    setSec(prev => ({ ...prev, [key]: value }));
+
   const handleSave = async () => {
     setSaveStatus('saving');
     try {
       await saveNotificationSettings(cfg);
+      await saveSecuritySettings(sec);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2500);
     } catch (e) {
@@ -68,6 +83,27 @@ export function SettingsPage() {
       setDigestTestStatus('error');
     }
   };
+
+  const handleTestSecurityDigest = async () => {
+    setSecDigestStatus('testing');
+    try {
+      await testSecurityDigest();
+      setSecDigestStatus('ok');
+      setTimeout(() => setSecDigestStatus('idle'), 3000);
+    } catch (e) {
+      setErrMsg(String(e));
+      setSecDigestStatus('error');
+    }
+  };
+
+  const secToggle = (key: keyof SecuritySettings, label: string, hint: string) => (
+    <div className="settings-num-row">
+      <label className="settings-num-row__label">{label}</label>
+      <input type="checkbox" checked={sec[key] as boolean} disabled={!sec.enabled}
+        onChange={e => setS(key, e.target.checked)} />
+      <span className="settings-num-row__hint">{hint}</span>
+    </div>
+  );
 
   return (
     <div className="settings-page">
@@ -267,6 +303,50 @@ export function SettingsPage() {
                 onChange={e => set('batch_time2', e.target.value)} />
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section__header">
+          <h3>{t.settings.securitySection}</h3>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={sec.enabled} onChange={e => setS('enabled', e.target.checked)} />
+            <span>{t.settings.enabled}</span>
+          </label>
+        </div>
+        <p className="settings-section__hint">{t.settings.securityHint}</p>
+        <div className="settings-num-fields">
+          {secToggle('alert_kev', t.settings.securityAlertKev, t.settings.securityAlertKevHint)}
+          {secToggle('alert_security_release', t.settings.securityAlertRelease, t.settings.securityAlertReleaseHint)}
+          {secToggle('alert_eol', t.settings.securityAlertEol, t.settings.securityAlertEolHint)}
+          {secToggle('notify_resolved', t.settings.securityNotifyResolved, t.settings.securityNotifyResolvedHint)}
+          {secToggle('digest_enabled', t.settings.securityDigest, t.settings.securityDigestHint)}
+          {sec.digest_enabled && (
+            <>
+              <div className="settings-num-row">
+                <label className="settings-num-row__label">{t.settings.digestWeekday}</label>
+                <select className="settings-select" value={sec.digest_weekday} disabled={!sec.enabled}
+                  onChange={e => setS('digest_weekday', parseInt(e.target.value))}>
+                  {t.settings.digestWeekdays.map((day, i) => (
+                    <option key={i} value={i + 1}>{day}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="settings-num-row">
+                <label className="settings-num-row__label">{t.settings.digestTime}</label>
+                <input className="settings-num-row__input settings-time-input" type="time" value={sec.digest_time}
+                  disabled={!sec.enabled} onChange={e => setS('digest_time', e.target.value)} />
+              </div>
+            </>
+          )}
+        </div>
+        <div className="settings-digest-footer">
+          {secDigestStatus === 'error' && <span className="settings-status settings-status--err">{t.settings.testDigestError(errMsg)}</span>}
+          {secDigestStatus === 'ok' && <span className="settings-status settings-status--ok">{t.settings.testDigestOk}</span>}
+          <button className="btn-secondary" onClick={handleTestSecurityDigest}
+            disabled={!anyEnabled || !sec.enabled || secDigestStatus === 'testing'}>
+            {secDigestStatus === 'testing' ? t.settings.testDigestSending : t.settings.testDigestBtn}
+          </button>
         </div>
       </div>
 

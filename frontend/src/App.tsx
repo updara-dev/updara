@@ -4,6 +4,7 @@ import { Dashboard } from './pages/Dashboard';
 import { ConnectorsPage } from './pages/ConnectorsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { StatsPage } from './pages/StatsPage';
+import { SecurityPage } from './pages/SecurityPage';
 import { HostDetailPage } from './pages/HostDetailPage';
 import { LoginPage } from './pages/LoginPage';
 import { AddHostWizard } from './components/AddHostWizard';
@@ -11,7 +12,7 @@ import { useT } from './i18n';
 import type { HostStatus } from './types';
 import './App.css';
 
-type View = 'dashboard' | 'connectors' | 'settings' | 'stats';
+type View = 'dashboard' | 'connectors' | 'settings' | 'stats' | 'security';
 
 export default function App() {
   const { t, lang, setLang } = useT();
@@ -84,6 +85,12 @@ export default function App() {
             {t.app.nav.stats}
           </button>
           <button
+            className={`nav-tab ${view === 'security' ? 'active' : ''}`}
+            onClick={() => setView('security')}
+          >
+            {t.app.nav.security}
+          </button>
+          <button
             className={`nav-tab ${view === 'settings' ? 'active' : ''}`}
             onClick={() => setView('settings')}
           >
@@ -127,6 +134,7 @@ export default function App() {
         )}
         {view === 'connectors' && <ConnectorsPage />}
         {view === 'stats' && <StatsPage onSelectHost={hostname => { setSelectedHostname(hostname); setView('dashboard'); }} />}
+        {view === 'security' && <SecurityPage onSelectHost={hostname => { setSelectedHostname(hostname); setView('dashboard'); }} />}
         {view === 'settings' && <SettingsPage />}
       </main>
       {wizardInitialName !== null && (

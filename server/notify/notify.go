@@ -51,13 +51,20 @@ func Send(cfg Config, hostname string, updates []Update) {
 	}
 
 	title := fmt.Sprintf("Updates available — %s", hostname)
-	body := strings.Join(lines, "\n")
+	SendMessage(cfg, title, strings.Join(lines, "\n"))
+}
 
+// SendMessage delivers a free-form message to every enabled channel.
+func SendMessage(cfg Config, title, body string) {
 	if cfg.NtfyEnabled && cfg.NtfyURL != "" && cfg.NtfyTopic != "" {
 		go sendNtfy(cfg.NtfyURL, cfg.NtfyTopic, title, body)
 	}
 	if cfg.TelegramEnabled && cfg.TelegramToken != "" && cfg.TelegramChatID != "" {
-		go sendTelegram(cfg.TelegramToken, cfg.TelegramChatID, title+"\n"+body)
+		text := title + "\n" + body
+		if len(text) > 4000 { // Telegram rejects messages over 4096 chars
+			text = strings.ToValidUTF8(text[:4000], "") + "\n…"
+		}
+		go sendTelegram(cfg.TelegramToken, cfg.TelegramChatID, text)
 	}
 	if cfg.EmailEnabled && cfg.EmailHost != "" && cfg.EmailTo != "" {
 		go sendEmail(cfg, title, body)

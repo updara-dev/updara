@@ -1,7 +1,7 @@
 export interface Translations {
   app: {
     tagline: string;
-    nav: { dashboard: string; connectors: string; settings: string; stats: string };
+    nav: { dashboard: string; connectors: string; settings: string; stats: string; security: string };
     updates: (n: number) => string;
     hosts: (n: number) => string;
     refresh: string;
@@ -149,6 +149,49 @@ export interface Translations {
     testDigestSending: string;
     testDigestOk: string;
     testDigestError: (e: string) => string;
+    securitySection: string;
+    securityHint: string;
+    securityAlertKev: string;
+    securityAlertKevHint: string;
+    securityAlertRelease: string;
+    securityAlertReleaseHint: string;
+    securityAlertEol: string;
+    securityAlertEolHint: string;
+    securityNotifyResolved: string;
+    securityNotifyResolvedHint: string;
+    securityDigest: string;
+    securityDigestHint: string;
+  };
+  security: {
+    title: string;
+    subtitle: string;
+    loading: string;
+    checkNow: string;
+    checking: string;
+    disabled: string;
+    noInventory: string;
+    noFindings: string;
+    open: string;
+    exploited: string;
+    eol: string;
+    hostsScanned: string;
+    feedsLabel: string;
+    feedEntries: (n: number) => string;
+    lastRun: (s: string) => string;
+    showDistro: (n: number) => string;
+    distroHint: string;
+    colSeverity: string;
+    colHost: string;
+    colRuntime: string;
+    colFix: string;
+    colDetail: string;
+    colSince: string;
+    onHost: string;
+    kindKev: string;
+    kindSecurity: string;
+    kindPossible: string;
+    kindEol: string;
+    distro: string;
   };
   stats: {
     title: string;

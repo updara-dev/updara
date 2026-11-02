@@ -1,0 +1,63 @@
+name: inventory
+display_name: Runtime Inventory
+category: security
+docs: https://github.com/updara-dev/updara
+
+# Reports Node.js, Python and PHP versions on the host and inside every running
+# container. The server matches them against CISA KEV, the Node.js security
+# release index and endoflife.date (Security page). Never offers an update itself.
+# Runtimes owned by dpkg/apk are marked "~distro" — distros backport fixes
+# without bumping the version, so those are shown but never alerted on.
+check:
+  type: shell
+  command: |
+    PROBE=$(cat <<'EOF'
+    for r in node python3 php; do
+      b=$(command -v $r 2>/dev/null) || continue
+      case $r in
+        node)    v=$(node -v 2>/dev/null | sed 's/^v//') ;;
+        python3) v=$(python3 -c 'import platform; print(platform.python_version())' 2>/dev/null) ;;
+        php)     v=$(php -r 'echo PHP_VERSION;' 2>/dev/null) ;;
+      esac
+      [ -n "$v" ] || continue
+      o=""
+      f=$(readlink -f "$b" 2>/dev/null || echo "$b")
+      if command -v dpkg >/dev/null 2>&1; then
+        p=$(dpkg -S "$f" 2>/dev/null | head -n1 | cut -d: -f1)
+        if [ -n "$p" ]; then
+          case "$(dpkg-query -W -f='${Version}' "$p" 2>/dev/null)" in
+            *nodesource*) ;;
+            *) o="~distro" ;;
+          esac
+        fi
+      elif command -v apk >/dev/null 2>&1; then
+        apk info --who-owns "$f" 2>/dev/null | grep -q 'owned by' && o="~distro"
+      fi
+      echo "$r $v$o"
+    done
+    EOF
+    )
+    tmp=$(mktemp -d)
+    if command -v docker >/dev/null 2>&1; then
+      for c in $(docker ps --format '{{.Names}}' 2>/dev/null); do
+        (
+          out=$(timeout 10 docker exec "$c" sh -c "$PROBE" 2>/dev/null | grep -E '^(node|python3|php) [0-9]')
+          if [ -z "$out" ]; then
+            out=$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$c" 2>/dev/null | sed -n \
+              -e 's/^NODE_VERSION=\(.*\)/node \1/p' \
+              -e 's/^PYTHON_VERSION=\(.*\)/python3 \1/p' \
+              -e 's/^PHP_VERSION=\(.*\)/php \1/p')
+          fi
+          printf '%s\n' "$out" | sed "/^$/d; s/\$/@$c/" > "$tmp/$c"
+        ) &
+      done
+      wait
+    fi
+    items=$({ sh -c "$PROBE" 2>/dev/null | sed 's/$/@host/'; cat "$tmp"/* 2>/dev/null; } | sed '/^$/d' | sort -u)
+    rm -rf "$tmp"
+    echo "count=$(printf '%s\n' "$items" | sed '/^$/d' | wc -l | tr -d ' ')"
+    echo "runtimes=$(printf '%s\n' "$items" | paste -sd, - | sed 's/,/, /g')"
+  parse:
+    count:    "$count"
+    runtimes: "$runtimes"
+  interval: 21600

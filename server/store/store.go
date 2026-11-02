@@ -103,6 +103,18 @@ CREATE TABLE IF NOT EXISTS notification_queue (
     PRIMARY KEY (hostname, connector)
 );
 
+CREATE TABLE IF NOT EXISTS security_findings (
+    host_id     TEXT    NOT NULL,
+    component   TEXT    NOT NULL,
+    kind        TEXT    NOT NULL,
+    data_json   TEXT    NOT NULL DEFAULT '{}',
+    fingerprint TEXT    NOT NULL DEFAULT '',
+    notified_fp TEXT    NOT NULL DEFAULT '',
+    first_seen  TEXT    NOT NULL,
+    resolved_at TEXT    NOT NULL DEFAULT '',
+    PRIMARY KEY (host_id, component, kind)
+);
+
 CREATE INDEX IF NOT EXISTS idx_results_host    ON results(host_id);
 CREATE INDEX IF NOT EXISTS idx_commands_host   ON commands(host_id);
 CREATE INDEX IF NOT EXISTS idx_commands_status ON commands(status);
@@ -586,6 +598,7 @@ func (s *Store) DeleteHost(hostname string) {
 	s.db.Exec(`DELETE FROM ignored_items WHERE host_id=?`, hostname)
 	s.db.Exec(`DELETE FROM disabled_connectors WHERE host_id=?`, hostname)
 	s.db.Exec(`DELETE FROM commands WHERE host_id=? AND status='pending'`, hostname)
+	s.db.Exec(`DELETE FROM security_findings WHERE host_id=?`, hostname)
 }
 
 func (s *Store) GetCommand(id string) (*model.Command, bool) {

@@ -8,10 +8,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/updara/server/model"
 	"github.com/updara/server/notify"
+	"github.com/updara/server/security"
 	"github.com/updara/server/store"
 )
 
@@ -21,6 +23,10 @@ type Handler struct {
 	binariesDir   string
 	publicURL     string
 	authToken     string
+
+	secFeeds   *security.Feeds
+	secMu      sync.Mutex
+	secLastRun time.Time
 }
 
 func NewHandler(s *store.Store, connectorsDir, binariesDir, publicURL, authToken string) *Handler {
@@ -30,6 +36,7 @@ func NewHandler(s *store.Store, connectorsDir, binariesDir, publicURL, authToken
 		binariesDir:   binariesDir,
 		publicURL:     publicURL,
 		authToken:     authToken,
+		secFeeds:      security.NewFeeds(),
 	}
 }
 
@@ -90,6 +97,13 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("PUT /api/v1/settings/notifications", h.saveNotificationSettings)
 	mux.HandleFunc("POST /api/v1/settings/notifications/test", h.testNotification)
 	mux.HandleFunc("POST /api/v1/settings/notifications/test-digest", h.testDigest)
+
+	// Security radar
+	mux.HandleFunc("GET /api/v1/security", h.securityOverview)
+	mux.HandleFunc("POST /api/v1/security/run", h.securityRun)
+	mux.HandleFunc("GET /api/v1/settings/security", h.getSecuritySettings)
+	mux.HandleFunc("PUT /api/v1/settings/security", h.saveSecuritySettings)
+	mux.HandleFunc("POST /api/v1/settings/security/test-digest", h.testSecurityDigest)
 
 	// Statistics
 	mux.HandleFunc("GET /api/v1/stats", h.globalStats)
