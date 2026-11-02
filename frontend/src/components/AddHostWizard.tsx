@@ -19,6 +19,9 @@ const SERVICE_TEMPLATES: { keywords: string[]; label: string; connectors: string
   { keywords: ['debian', 'ubuntu', 'server'],      label: 'Linux Server',    connectors: ['apt', 'system'] },
 ];
 
+// Preselected for every host regardless of template — feeds the security radar.
+const BASELINE_CONNECTORS = ['inventory'];
+
 function detectTemplate(name: string) {
   const lower = name.toLowerCase();
   return SERVICE_TEMPLATES.find(t => t.keywords.some(k => lower.includes(k))) ?? null;
@@ -39,7 +42,9 @@ export function AddHostWizard({ onClose, initialName = '' }: Props) {
   const [step, setStep] = useState<1 | 2>(1);
   const [name, setName] = useState(initialName);
   const [connectors, setConnectors] = useState<ConnectorMeta[]>([]);
-  const [selected, setSelected] = useState<Record<string, boolean>>({ apt: true, system: true });
+  const [selected, setSelected] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(['apt', 'system', ...BASELINE_CONNECTORS].map(n => [n, true])),
+  );
   const [vars, setVars] = useState<Record<string, Record<string, string>>>({});
   const [search, setSearch] = useState('');
   const [installCmd, setInstallCmd] = useState('');
@@ -56,7 +61,7 @@ export function AddHostWizard({ onClose, initialName = '' }: Props) {
     if (tmpl && tmpl.label !== lastTemplate) {
       setLastTemplate(tmpl.label);
       const sel: Record<string, boolean> = {};
-      tmpl.connectors.forEach(n => { sel[n] = true; });
+      [...tmpl.connectors, ...BASELINE_CONNECTORS].forEach(n => { sel[n] = true; });
       setSelected(sel);
     } else if (!tmpl && lastTemplate) {
       setLastTemplate(null);
@@ -64,7 +69,7 @@ export function AddHostWizard({ onClose, initialName = '' }: Props) {
   }, [name]);
 
   const template = detectTemplate(name);
-  const templateConnectors = new Set(template?.connectors ?? []);
+  const templateConnectors = new Set([...(template?.connectors ?? []), ...BASELINE_CONNECTORS]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return connectors;
