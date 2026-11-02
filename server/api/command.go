@@ -168,11 +168,14 @@ func (h *Handler) installConnector(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	cmd := "mkdir -p /etc/updara/connectors && curl -sf " +
-		h.publicURL + "/api/v1/connectors/" + connector + "/yaml" +
-		" -o /etc/updara/connectors/" + connector + ".yaml" +
+	// Some hosts only have wget. Only the restart is backgrounded, so a failed
+	// download makes the command fail instead of silently reporting done.
+	url := h.publicURL + "/api/v1/connectors/" + connector + "/yaml"
+	file := "/etc/updara/connectors/" + connector + ".yaml"
+	cmd := "mkdir -p /etc/updara/connectors && " +
+		"{ curl -sf " + url + " -o " + file + " 2>/dev/null || wget -qO " + file + " " + url + " || { rm -f " + file + "; false; }; }" +
 		svcCmd +
-		" && nohup sh -c 'sleep 2 && systemctl restart updara-agent' >/dev/null 2>&1 &"
+		" && { nohup sh -c 'sleep 2 && systemctl restart updara-agent' >/dev/null 2>&1 & }"
 
 	b := make([]byte, 8)
 	rand.Read(b)
