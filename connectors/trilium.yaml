@@ -1,7 +1,7 @@
 name: trilium
 display_name: Trilium Notes
 category: application
-docs: https://github.com/TriliumNext/Notes/releases
+docs: https://github.com/TriliumNext/Trilium/releases
 
 vars: []
 
@@ -23,10 +23,10 @@ check:
         print("error=Trilium not found at /opt/trilium")
         sys.exit(0)
 
-    # Latest from GitHub (TriliumNext/Notes)
+    # Latest from GitHub (TriliumNext/Notes was archived at v0.95.0 and moved)
     try:
         req = Request(
-            'https://api.github.com/repos/TriliumNext/Notes/releases/latest',
+            'https://api.github.com/repos/TriliumNext/Trilium/releases/latest',
             headers={'User-Agent': 'updara-agent/1.0'}
         )
         data = json.loads(urlopen(req, timeout=10).read())
@@ -53,20 +53,35 @@ update:
     LATEST=$(python3 -c "
     import json
     from urllib.request import urlopen, Request
-    req = Request('https://api.github.com/repos/TriliumNext/Notes/releases/latest', headers={'User-Agent': 'updara-agent/1.0'})
+    req = Request('https://api.github.com/repos/TriliumNext/Trilium/releases/latest', headers={'User-Agent': 'updara-agent/1.0'})
     print(json.loads(urlopen(req, timeout=10).read())['tag_name'].lstrip('v'))
     ")
-    echo "Updating Trilium to v${LATEST}..."
-    cd /tmp
-    wget -q "https://github.com/TriliumNext/Notes/releases/download/v${LATEST}/TriliumNextNotes-Server-v${LATEST}-linux-x64.tar.xz" -O trilium-next.tar.xz
-    tar xf trilium-next.tar.xz
-    EXTRACTED=$(find /tmp -maxdepth 1 -name 'TriliumNextNotes-Server-*-linux-x64' -type d | head -1)
+    CURRENT=$(cat /opt/trilium/TRILIUMNEXT_VERSION 2>/dev/null || echo unknown)
+    case "$(uname -m)" in
+      aarch64) ARCH=arm64 ;;
+      *)       ARCH=x64 ;;
+    esac
+    echo "Updating Trilium ${CURRENT} -> ${LATEST}..."
+    TMP=$(mktemp -d)
+    trap 'rm -rf "$TMP"' EXIT
+    wget -q "https://github.com/TriliumNext/Trilium/releases/download/v${LATEST}/TriliumNotes-Server-v${LATEST}-linux-${ARCH}.tar.xz" -O "$TMP/trilium.tar.xz"
+    tar xf "$TMP/trilium.tar.xz" -C "$TMP"
+    EXTRACTED=$(find "$TMP" -mindepth 1 -maxdepth 1 -type d -name 'Trilium*-Server-*' | head -1)
+    [ -x "$EXTRACTED/trilium.sh" ] || { echo "unexpected archive layout"; exit 1; }
     systemctl stop trilium
+    # Major jumps migrate the database — keep a copy of the data dir.
+    DATA="${TRILIUM_DATA_DIR:-/root/.local/share/trilium-data}"
+    if [ -d "$DATA" ]; then
+      rm -rf "${DATA}.bak"
+      cp -a "$DATA" "${DATA}.bak"
+      echo "Backup: ${DATA}.bak (${CURRENT})"
+    fi
     rsync -a --delete "${EXTRACTED}/" /opt/trilium/
     echo "${LATEST}" > /opt/trilium/TRILIUMNEXT_VERSION
     systemctl start trilium
-    rm -rf "${EXTRACTED}" /tmp/trilium-next.tar.xz
+    sleep 5
+    systemctl is-active --quiet trilium || { echo "Trilium failed to start — restore ${DATA}.bak"; exit 1; }
     echo "Trilium updated to v${LATEST}"
 
 notifications:
-  changelog: "https://github.com/TriliumNext/Notes/releases"
+  changelog: "https://github.com/TriliumNext/Trilium/releases"
