@@ -105,6 +105,11 @@ func (h *Handler) Router() http.Handler {
 	mux.HandleFunc("PUT /api/v1/settings/security", h.saveSecuritySettings)
 	mux.HandleFunc("POST /api/v1/settings/security/test-digest", h.testSecurityDigest)
 
+	// Offline watch
+	mux.HandleFunc("GET /api/v1/settings/offline", h.getOfflineSettings)
+	mux.HandleFunc("PUT /api/v1/settings/offline", h.saveOfflineSettings)
+	mux.HandleFunc("PUT /api/v1/hosts/{hostname}/monitoring", h.setHostMonitoring)
+
 	// Statistics
 	mux.HandleFunc("GET /api/v1/stats", h.globalStats)
 	mux.HandleFunc("GET /api/v1/hosts/{hostname}/stats", h.hostStats)
@@ -159,7 +164,7 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Tell deleted agents to uninstall themselves
-	if req.Token == "" && h.store.IsDeleted(req.Hostname) {
+	if req.Token == "" && h.store.ShouldUninstall(req.Hostname, req.IPAddress) {
 		http.Error(w, "host deleted", http.StatusNotFound)
 		return
 	}
@@ -314,7 +319,7 @@ func (h *Handler) shouldFireDigest(cfg notificationSettings, now time.Time) bool
 	case "daily":
 		return true
 	case "weekly":
-		wd := int(now.Weekday()) // 0=Sun … 6=Sat
+		wd := int(now.Weekday())        // 0=Sun … 6=Sat
 		target := cfg.DigestWeekday % 7 // 1=Mon…6=Sat, 7→0=Sun
 		return wd == target
 	default: // monthly

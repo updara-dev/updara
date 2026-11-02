@@ -9,6 +9,10 @@ type Host struct {
 	IPAddress    string    `json:"ip_address,omitempty"`
 	AgentVersion string    `json:"agent_version"`
 	LastSeen     time.Time `json:"last_seen"`
+	Public       bool      `json:"public"`
+	// OfflineMutedUntil silences the offline alert: "" = not muted,
+	// "forever", or an RFC3339 timestamp.
+	OfflineMutedUntil string `json:"offline_muted_until,omitempty"`
 }
 
 type CheckResult struct {

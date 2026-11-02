@@ -136,6 +136,9 @@ func New(path string) *Store {
 		`ALTER TABLE provisions ADD COLUMN server_url TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE hosts ADD COLUMN display_name TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE results ADD COLUMN update_since TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE hosts ADD COLUMN public INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE hosts ADD COLUMN offline_muted_until TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE hosts ADD COLUMN offline_notified_at TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, m := range migrations {
 		db.Exec(m) // ignore errors (column may already exist)
@@ -229,12 +232,42 @@ func (s *Store) RenameHost(hostname, displayName string) error {
 	return err
 }
 
-func (s *Store) IsDeleted(hostname string) bool {
+const uninstallWindow = 7 * 24 * time.Hour
+
+// ShouldUninstall reports whether an agent reporting as hostname from ip should
+// remove itself. Only recent tombstones count, and never when another host with
+// the same IP still exists — then the deleted entry was just a duplicate (e.g. a
+// truncated hostname) of a host that is still in use.
+func (s *Store) ShouldUninstall(hostname, ip string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var count int
-	s.db.QueryRow(`SELECT COUNT(*) FROM deleted_hosts WHERE host_id=?`, hostname).Scan(&count)
-	return count > 0
+	var deletedAt string
+	if s.db.QueryRow(`SELECT deleted_at FROM deleted_hosts WHERE host_id=?`, hostname).Scan(&deletedAt) != nil {
+		return false
+	}
+	t, err := time.Parse(time.RFC3339Nano, deletedAt)
+	if err != nil || time.Since(t) > uninstallWindow {
+		return false
+	}
+	return !s.hasIPSibling(hostname, ip)
+}
+
+// IsDuplicateHost reports whether another host entry shares this host's IP.
+func (s *Store) IsDuplicateHost(hostname string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var ip string
+	s.db.QueryRow(`SELECT ip_address FROM hosts WHERE id=?`, hostname).Scan(&ip)
+	return s.hasIPSibling(hostname, ip)
+}
+
+func (s *Store) hasIPSibling(hostname, ip string) bool {
+	if ip == "" {
+		return false
+	}
+	var n int
+	s.db.QueryRow(`SELECT COUNT(*) FROM hosts WHERE ip_address=? AND id!=?`, ip, hostname).Scan(&n)
+	return n > 0
 }
 
 func (s *Store) fetchDisabled(hostID string) map[string]bool {
@@ -256,7 +289,7 @@ func (s *Store) AllHosts() []model.HostStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rows, err := s.db.Query(`SELECT id, hostname, display_name, ip_address, agent_version, last_seen FROM hosts ORDER BY hostname`)
+	rows, err := s.db.Query(`SELECT id, hostname, display_name, ip_address, agent_version, last_seen, public, offline_muted_until FROM hosts ORDER BY hostname`)
 	if err != nil {
 		log.Printf("store: query hosts: %v", err)
 		return nil
@@ -268,7 +301,7 @@ func (s *Store) AllHosts() []model.HostStatus {
 	for rows.Next() {
 		var h model.Host
 		var lastSeen string
-		if err := rows.Scan(&h.ID, &h.Hostname, &h.DisplayName, &h.IPAddress, &h.AgentVersion, &lastSeen); err != nil {
+		if err := rows.Scan(&h.ID, &h.Hostname, &h.DisplayName, &h.IPAddress, &h.AgentVersion, &lastSeen, &h.Public, &h.OfflineMutedUntil); err != nil {
 			continue
 		}
 		h.LastSeen, _ = time.Parse(time.RFC3339Nano, lastSeen)
@@ -290,8 +323,8 @@ func (s *Store) GetHostStatus(hostname string) (*model.HostStatus, bool) {
 
 	var h model.Host
 	var lastSeen string
-	err := s.db.QueryRow(`SELECT id, hostname, display_name, ip_address, agent_version, last_seen FROM hosts WHERE id=?`, hostname).
-		Scan(&h.ID, &h.Hostname, &h.DisplayName, &h.IPAddress, &h.AgentVersion, &lastSeen)
+	err := s.db.QueryRow(`SELECT id, hostname, display_name, ip_address, agent_version, last_seen, public, offline_muted_until FROM hosts WHERE id=?`, hostname).
+		Scan(&h.ID, &h.Hostname, &h.DisplayName, &h.IPAddress, &h.AgentVersion, &lastSeen, &h.Public, &h.OfflineMutedUntil)
 	if err != nil {
 		return nil, false
 	}
@@ -746,7 +779,7 @@ func (s *Store) ClearResolved(hostname string) {
 type HostStatSummary struct {
 	Hostname     string `json:"hostname"`
 	IPAddress    string `json:"ip_address"`
-	LastUpdate   string `json:"last_update"`   // RFC3339 or ""
+	LastUpdate   string `json:"last_update"` // RFC3339 or ""
 	TotalDone    int    `json:"total_done"`
 	Done30Days   int    `json:"done_30days"`
 	TopConnector string `json:"top_connector"` // most-updated connector, "" if none

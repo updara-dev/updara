@@ -86,6 +86,13 @@ export interface Translations {
     addConnectorDone: string;
     addConnectorError: (e: string) => string;
     noMoreConnectors: string;
+    publicLabel: string;
+    publicHint: string;
+    offlineAlert: string;
+    offlineAlertActive: string;
+    offlineMutedUntil: (date: string) => string;
+    offlineMuteFor: (days: number) => string;
+    offlineMuteForever: string;
   };
   settings: {
     title: string;
@@ -159,6 +166,12 @@ export interface Translations {
     securityAlertEolHint: string;
     securityNotifyResolved: string;
     securityNotifyResolvedHint: string;
+    offlineSection: string;
+    offlineHint: string;
+    offlineThreshold: string;
+    offlineThresholdHint: string;
+    offlinePublicThreshold: string;
+    offlinePublicThresholdHint: string;
     securityDigest: string;
     securityDigestHint: string;
   };

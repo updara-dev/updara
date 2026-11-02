@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { fetchHostDetail, ignoreConnector, unignoreConnector, triggerUpdate, fetchCommands, removeHostConnector, deleteHost, fetchHostProvision, updateProvision, recheckConnector, fetchConnectors, syncAgent, installConnector, fetchHostStats, renameHost } from '../api/client';
+import { fetchHostDetail, ignoreConnector, unignoreConnector, triggerUpdate, fetchCommands, removeHostConnector, deleteHost, fetchHostProvision, updateProvision, recheckConnector, fetchConnectors, syncAgent, installConnector, fetchHostStats, renameHost, setHostMonitoring } from '../api/client';
 import type { ConnectorMeta, UpdateRecord } from '../api/client';
 import { useT } from '../i18n';
 import type { HostDetail, CheckResult, Command, Provision } from '../types';
@@ -22,6 +22,18 @@ function agentStatus(lastSeen: string): 'online' | 'stale' | 'offline' {
   if (seconds < 300) return 'online';
   if (seconds < 3600) return 'stale';
   return 'offline';
+}
+
+// Mute timestamp still in the future, or null.
+function mutedUntilDate(v?: string): Date | null {
+  if (!v || v === 'forever') return null;
+  const d = new Date(v);
+  return d.getTime() > Date.now() ? d : null;
+}
+
+function mutedValue(v?: string): string {
+  if (v === 'forever') return v;
+  return mutedUntilDate(v) ? v! : '';
 }
 
 function stripAnsi(str: string): string {
@@ -544,6 +556,14 @@ export function HostDetailPage({ hostname, onBack }: Props) {
     await load();
   };
 
+  const handleMonitoring = async (isPublic: boolean, mute: string) => {
+    let until = mute;
+    const days = { '1d': 1, '7d': 7, '30d': 30 }[mute];
+    if (days) until = new Date(Date.now() + days * 86400_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+    await setHostMonitoring(hostname, isPublic, until).catch(console.error);
+    await load();
+  };
+
   if (!detail && !error) {
     return <p className="status-msg">Loading…</p>;
   }
@@ -631,6 +651,29 @@ export function HostDetailPage({ hostname, onBack }: Props) {
           {' · '}agent v{host.agent_version}
           {' · '}{t.hostDetail.lastSeen(timeAgo(host.last_seen))}
           {host.display_name && <>{' · '}<span className="host-detail__hostname-real">{host.hostname}</span></>}
+        </div>
+        <div className="host-detail__monitoring">
+          <label className="host-detail__monitoring-item" title={t.hostDetail.publicHint}>
+            <input type="checkbox" checked={!!host.public}
+              onChange={e => handleMonitoring(e.target.checked, host.offline_muted_until ?? '')} />
+            <span>🌐 {t.hostDetail.publicLabel}</span>
+          </label>
+          <label className="host-detail__monitoring-item">
+            <span>{t.hostDetail.offlineAlert}</span>
+            <select className="settings-select" value={mutedValue(host.offline_muted_until)}
+              onChange={e => handleMonitoring(!!host.public, e.target.value)}>
+              <option value="">{t.hostDetail.offlineAlertActive}</option>
+              {mutedUntilDate(host.offline_muted_until) && (
+                <option value={host.offline_muted_until}>
+                  {t.hostDetail.offlineMutedUntil(mutedUntilDate(host.offline_muted_until)!.toLocaleDateString())}
+                </option>
+              )}
+              <option value="1d">{t.hostDetail.offlineMuteFor(1)}</option>
+              <option value="7d">{t.hostDetail.offlineMuteFor(7)}</option>
+              <option value="30d">{t.hostDetail.offlineMuteFor(30)}</option>
+              <option value="forever">{t.hostDetail.offlineMuteForever}</option>
+            </select>
+          </label>
         </div>
       </div>
 

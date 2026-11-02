@@ -18,6 +18,7 @@ type SecurityFinding struct {
 	Distro      bool      `json:"distro"`
 	Detail      string    `json:"detail"`
 	FirstSeen   time.Time `json:"first_seen"`
+	Public      bool      `json:"public"` // host flagged as publicly reachable
 	Notified    bool      `json:"notified"`
 	Fingerprint string    `json:"-"`
 }

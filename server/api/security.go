@@ -128,6 +128,7 @@ func (h *Handler) runSecurityRadar() {
 			found[i].HostName = name
 		}
 		pending, resolved := h.store.SyncFindings(hostID, found)
+		h.markPublic(pending)
 		for _, f := range pending {
 			if cfg.shouldAlert(f) {
 				alerts = append(alerts, f)
@@ -160,6 +161,7 @@ func (h *Handler) runSecurityRadar() {
 
 func (h *Handler) sendSecurityDigest() {
 	findings := h.store.OpenFindings()
+	h.markPublic(findings)
 	sortFindings(findings)
 	var kev, eol, distro int
 	var relevant []model.SecurityFinding
@@ -201,13 +203,14 @@ func (h *Handler) sendSecurityDigest() {
 	if !lastRun.IsZero() {
 		fmt.Fprintf(&sb, "Last check: %s\n", lastRun.Format("2006-01-02 15:04"))
 	}
+	sb.WriteString(h.offlineDigestSection(time.Now()))
 	notify.SendMessage(h.toNotifyConfig(h.loadNotificationSettings()), "🛡️ Updara security digest", sb.String())
 }
 
 func formatFindings(findings []model.SecurityFinding, withLinks bool) string {
 	var lines []string
 	for _, f := range findings {
-		line := fmt.Sprintf("• %s: %s %s — %s", findingWhere(f), runtimeName(f.Runtime), f.Installed, f.Detail)
+		line := fmt.Sprintf("• %s%s: %s %s — %s", publicMark(f.Public), findingWhere(f), runtimeName(f.Runtime), f.Installed, f.Detail)
 		if f.Fixed != "" {
 			line += " → fix: " + f.Fixed
 		}
@@ -253,8 +256,8 @@ func kindRank(k string) int {
 	return 2
 }
 
-// sortFindings orders by severity: KEV first, then security releases, then EOL;
-// distro runtimes last.
+// sortFindings orders by severity: KEV first, then publicly reachable hosts,
+// then security releases before EOL; distro runtimes last.
 func sortFindings(fs []model.SecurityFinding) {
 	sort.SliceStable(fs, func(i, j int) bool {
 		a, b := fs[i], fs[j]
@@ -263,6 +266,9 @@ func sortFindings(fs []model.SecurityFinding) {
 		}
 		if a.KEV != b.KEV {
 			return a.KEV
+		}
+		if a.Public != b.Public {
+			return a.Public
 		}
 		if kindRank(a.Kind) != kindRank(b.Kind) {
 			return kindRank(a.Kind) < kindRank(b.Kind)
@@ -277,6 +283,7 @@ func sortFindings(fs []model.SecurityFinding) {
 // GET /api/v1/security
 func (h *Handler) securityOverview(w http.ResponseWriter, r *http.Request) {
 	findings := h.store.OpenFindings()
+	h.markPublic(findings)
 	sortFindings(findings)
 	h.secMu.Lock()
 	lastRun := h.secLastRun

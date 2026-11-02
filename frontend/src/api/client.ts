@@ -114,6 +114,13 @@ export const renameHost = (hostname: string, displayName: string) =>
     body: JSON.stringify({ display_name: displayName }),
   });
 
+export const setHostMonitoring = (hostname: string, isPublic: boolean, offlineMutedUntil: string) =>
+  request<void>(`/api/v1/hosts/${encodeURIComponent(hostname)}/monitoring`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ public: isPublic, offline_muted_until: offlineMutedUntil }),
+  });
+
 export const fetchHostProvision = (hostname: string) =>
   request<import('../types').Provision>(`/api/v1/hosts/${encodeURIComponent(hostname)}/provision`);
 
@@ -198,6 +205,7 @@ export interface SecurityFinding {
   distro: boolean;
   detail: string;
   first_seen: string;
+  public: boolean;
   notified: boolean;
 }
 
@@ -238,6 +246,22 @@ export const fetchSecuritySettings = () =>
 
 export const saveSecuritySettings = (s: SecuritySettings) =>
   request<void>('/api/v1/settings/security', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(s),
+  });
+
+export interface OfflineSettings {
+  enabled: boolean;
+  threshold_hours: number;
+  public_threshold_hours: number;
+}
+
+export const fetchOfflineSettings = () =>
+  request<OfflineSettings>('/api/v1/settings/offline');
+
+export const saveOfflineSettings = (s: OfflineSettings) =>
+  request<void>('/api/v1/settings/offline', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(s),

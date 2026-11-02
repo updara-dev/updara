@@ -141,7 +141,7 @@ export function SecurityPage({ onSelectHost }: Props) {
                       </td>
                       <td>
                         <div className="stats-table__host">
-                          <span className="stats-table__hostname">{f.host_name}</span>
+                          <span className="stats-table__hostname">{f.public && <span title="public">🌐 </span>}{f.host_name}</span>
                           <span className="stats-table__ip">{f.location === 'host' ? t.security.onHost : f.location}</span>
                         </div>
                       </td>

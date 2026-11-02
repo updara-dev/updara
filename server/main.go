@@ -38,6 +38,7 @@ func main() {
 	h := api.NewHandler(s, connectorsDir, binariesDir, publicURL, authToken)
 	h.StartNotificationScheduler()
 	h.StartSecurityRadar()
+	h.StartOfflineWatch()
 
 	log.Printf("Updara server listening on %s", addr)
 	if err := http.ListenAndServe(addr, h.Router()); err != nil {

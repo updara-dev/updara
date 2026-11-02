@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import {
   fetchNotificationSettings, saveNotificationSettings, testNotification, testDigest,
   fetchSecuritySettings, saveSecuritySettings, testSecurityDigest,
+  fetchOfflineSettings, saveOfflineSettings,
 } from '../api/client';
-import type { NotificationSettings, SecuritySettings } from '../api/client';
+import type { NotificationSettings, SecuritySettings, OfflineSettings } from '../api/client';
 import { useT } from '../i18n';
 
 const empty: NotificationSettings = {
@@ -24,10 +25,13 @@ const securityDefaults: SecuritySettings = {
   notify_resolved: true, digest_enabled: true, digest_weekday: 1, digest_time: '08:00',
 };
 
+const offlineDefaults: OfflineSettings = { enabled: true, threshold_hours: 24, public_threshold_hours: 1 };
+
 export function SettingsPage() {
   const { t } = useT();
   const [cfg, setCfg] = useState<NotificationSettings>(empty);
   const [sec, setSec] = useState<SecuritySettings>(securityDefaults);
+  const [off, setOff] = useState<OfflineSettings>(offlineDefaults);
   const [secDigestStatus, setSecDigestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
@@ -37,6 +41,7 @@ export function SettingsPage() {
   useEffect(() => {
     fetchNotificationSettings().then(setCfg).catch(() => {});
     fetchSecuritySettings().then(setSec).catch(() => {});
+    fetchOfflineSettings().then(setOff).catch(() => {});
   }, []);
 
   const set = (key: keyof NotificationSettings, value: string | boolean | number) =>
@@ -50,6 +55,7 @@ export function SettingsPage() {
     try {
       await saveNotificationSettings(cfg);
       await saveSecuritySettings(sec);
+      await saveOfflineSettings(off);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2500);
     } catch (e) {
@@ -347,6 +353,31 @@ export function SettingsPage() {
             disabled={!anyEnabled || !sec.enabled || secDigestStatus === 'testing'}>
             {secDigestStatus === 'testing' ? t.settings.testDigestSending : t.settings.testDigestBtn}
           </button>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <div className="settings-section__header">
+          <h3>{t.settings.offlineSection}</h3>
+          <label className="settings-toggle">
+            <input type="checkbox" checked={off.enabled} onChange={e => setOff(p => ({ ...p, enabled: e.target.checked }))} />
+            <span>{t.settings.enabled}</span>
+          </label>
+        </div>
+        <p className="settings-section__hint">{t.settings.offlineHint}</p>
+        <div className="settings-num-fields">
+          <div className="settings-num-row">
+            <label className="settings-num-row__label">{t.settings.offlineThreshold}</label>
+            <input className="settings-num-row__input" type="number" min={1} max={720} value={off.threshold_hours}
+              disabled={!off.enabled} onChange={e => setOff(p => ({ ...p, threshold_hours: parseInt(e.target.value) || 24 }))} />
+            <span className="settings-num-row__hint">{t.settings.offlineThresholdHint}</span>
+          </div>
+          <div className="settings-num-row">
+            <label className="settings-num-row__label">{t.settings.offlinePublicThreshold}</label>
+            <input className="settings-num-row__input" type="number" min={1} max={720} value={off.public_threshold_hours}
+              disabled={!off.enabled} onChange={e => setOff(p => ({ ...p, public_threshold_hours: parseInt(e.target.value) || 1 }))} />
+            <span className="settings-num-row__hint">{t.settings.offlinePublicThresholdHint}</span>
+          </div>
         </div>
       </div>
 

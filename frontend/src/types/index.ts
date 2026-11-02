@@ -5,6 +5,8 @@ export interface Host {
   ip_address?: string;
   agent_version: string;
   last_seen: string;
+  public?: boolean;
+  offline_muted_until?: string; // "forever" or RFC3339
 }
 
 export interface CheckResult {

@@ -21,9 +21,9 @@ import (
 
 func (h *Handler) createProvision(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name       string                 `json:"name"`
-		HostType   string                 `json:"host_type"`
-		Connectors []model.ConnectorSpec  `json:"connectors"`
+		Name       string                `json:"name"`
+		HostType   string                `json:"host_type"`
+		Connectors []model.ConnectorSpec `json:"connectors"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -284,8 +284,15 @@ func (h *Handler) deleteConnector(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) deleteHost(w http.ResponseWriter, r *http.Request) {
 	hostname := r.PathValue("hostname")
 
+	// A duplicate entry shares its agent with a host that stays — don't kill it.
+	duplicate := h.store.IsDuplicateHost(hostname)
+
 	// DeleteHost first (clears all existing commands + adds tombstone)
 	h.store.DeleteHost(hostname)
+	if duplicate {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 
 	// Queue self-destruct AFTER delete so it isn't swept up by DeleteHost.
 	// Disables+removes service files, connector dir, then stops the running agent
